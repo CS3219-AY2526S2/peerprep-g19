@@ -1,49 +1,68 @@
-import jwt from "jsonwebtoken";
+import admin from "../config/firebase.js";
+import { isValidObjectId } from "mongoose";
 import { findUserById as _findUserById } from "../model/repository.js";
-import { USER_ROLES } from "../model/user-model.js";
 
-export function verifyAccessToken(req, res, next) {
-  const authHeader = req.headers["authorization"];
-  if (!authHeader) {
+export const verifyAccessToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({ message: "Authentication failed" });
   }
 
-  // request auth header: `Authorization: Bearer + <access_token>`
-  const token = authHeader.split(" ")[1];
-  jwt.verify(token, process.env.JWT_SECRET, async (err, user) => {
-    if (err) {
-      return res.status(401).json({ message: "Authentication failed" });
-    }
+  const idToken = authHeader.split("Bearer ")[1];
 
-    // load latest user info from DB
-    const dbUser = await _findUserById(user.id);
-    if (!dbUser) {
-      return res.status(401).json({ message: "Authentication failed" });
-    }
-
-    req.user = { id: dbUser.id, username: dbUser.username, email: dbUser.email, role: dbUser.role };
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    req.user = decodedToken; // { uid, email, name, ... }
     next();
-  });
-}
-
-export function verifyIsAdmin(req, res, next) {
-  if (req.user.role === USER_ROLES.ADMIN) {
-    next();
-  } else {
-    return res.status(403).json({ message: "Not authorized to access this resource" });
+  } catch (error) {
+    return res.status(401).json({ message: "Authentication failed" });
   }
-}
+};
 
-export function verifyIsOwnerOrAdmin(req, res, next) {
-  if (req.user.role === USER_ROLES.ADMIN) {
+export const verifyIsAdmin = (req, res, next) => {
+  if (req.user?.role !== "admin") {
+    return res
+      .status(403)
+      .json({ message: "Not authorized to access this resource" });
+  }
+  next();
+};
+
+export const verifyUserOrAdmin = (req, res, next) => {
+  const validRoles = ["user", "admin"];
+  if (!validRoles.includes(req.user?.role)) {
+    return res.status(403).json({ message: "Access required" });
+  }
+  next();
+};
+
+export const verifyIsOwnerOrAdmin = async (req, res, next) => {
+  if (req.user?.role === "admin") {
     return next();
   }
 
-  const userIdFromReqParams = req.params.id;
-  const userIdFromToken = req.user.id;
-  if (userIdFromReqParams === userIdFromToken) {
+  const ownerIdFromParams = req.params.uid || req.params.id;
+  const userIdFromToken = req.user?.uid;
+
+  if (!ownerIdFromParams || !userIdFromToken) {
+    return res
+      .status(403)
+      .json({ message: "Not authorized to access this resource" });
+  }
+
+  if (ownerIdFromParams === userIdFromToken) {
     return next();
   }
 
-  return res.status(403).json({ message: "Not authorized to access this resource" });
-}
+  if (isValidObjectId(ownerIdFromParams)) {
+    const ownerUser = await _findUserById(ownerIdFromParams);
+    if (ownerUser?.firebaseuuid === userIdFromToken) {
+      return next();
+    }
+  }
+
+  return res
+    .status(403)
+    .json({ message: "Not authorized to access this resource" });
+};

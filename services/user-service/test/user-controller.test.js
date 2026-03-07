@@ -2,103 +2,106 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockRes } from "./test-utils.js";
 
 const repositoryMocks = {
-  createUser: vi.fn(),
-  findUserByUsernameOrEmail: vi.fn(),
-};
-
-const bcryptMocks = {
-  genSaltSync: vi.fn(),
-  hashSync: vi.fn(),
-};
-
-vi.mock("../model/repository.js", () => ({
-  createUser: repositoryMocks.createUser,
-  findUserByUsernameOrEmail: repositoryMocks.findUserByUsernameOrEmail,
-  deleteUserById: vi.fn(),
-  findAllUsers: vi.fn(),
-  findUserByEmail: vi.fn(),
   findUserById: vi.fn(),
   findUserByUsername: vi.fn(),
   updateUserById: vi.fn(),
   updateUserPrivilegeById: vi.fn(),
+};
+
+const setUserRoleClaimMock = vi.fn();
+
+vi.mock("../model/repository.js", () => ({
+  deleteUserById: vi.fn(),
+  findAllUsers: vi.fn(),
+  findUserById: repositoryMocks.findUserById,
+  findUserByUsername: repositoryMocks.findUserByUsername,
+  updateUserById: repositoryMocks.updateUserById,
+  updateUserPrivilegeById: repositoryMocks.updateUserPrivilegeById,
 }));
 
-vi.mock("bcrypt", () => ({
-  default: bcryptMocks,
+vi.mock("../helper/firebase-auth-helper.js", () => ({
+  setUserRoleClaim: setUserRoleClaimMock,
 }));
 
-const { createUser } = await import("../controller/user-controller.js");
+const { updateUser, updateUserPrivilege } = await import(
+  "../controller/user-controller.js"
+);
 
-describe("user-controller createUser", () => {
+describe("user-controller", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("returns 400 when required fields are missing", async () => {
-    const req = { body: { username: "john" } };
+  it("updateUser returns 400 when username is missing", async () => {
+    const req = {
+      body: {},
+      params: { id: "507f1f77bcf86cd799439011" },
+    };
     const res = createMockRes();
 
-    await createUser(req, res);
+    await updateUser(req, res);
 
     expect(res.statusCode).toBe(400);
-    expect(res.body.message).toContain("missing");
+    expect(res.body).toEqual({ message: "username is missing!" });
   });
 
-  it("returns 409 when username or email already exists", async () => {
-    repositoryMocks.findUserByUsernameOrEmail.mockResolvedValueOnce({ id: "existing-id" });
-
-    const req = {
-      body: {
-        username: "john",
-        email: "john@example.com",
-        password: "password123",
-      },
-    };
-    const res = createMockRes();
-
-    await createUser(req, res);
-
-    expect(res.statusCode).toBe(409);
-    expect(res.body).toEqual({ message: "username or email already exists" });
-  });
-
-  it("returns 201 with formatted user when creation succeeds", async () => {
-    repositoryMocks.findUserByUsernameOrEmail.mockResolvedValueOnce(null);
-    bcryptMocks.genSaltSync.mockReturnValueOnce("salt");
-    bcryptMocks.hashSync.mockReturnValueOnce("hashed-password");
-    repositoryMocks.createUser.mockResolvedValueOnce({
-      id: "abc123",
-      username: "john",
-      email: "john@example.com",
+  it("updateUser returns 200 when username update succeeds", async () => {
+    repositoryMocks.findUserById.mockResolvedValueOnce({
+      id: "507f1f77bcf86cd799439011",
+    });
+    repositoryMocks.findUserByUsername.mockResolvedValueOnce(null);
+    repositoryMocks.updateUserById.mockResolvedValueOnce({
+      id: "507f1f77bcf86cd799439011",
+      username: "newname",
+      email: "user@example.com",
       role: "user",
       createdAt: "2026-01-01T00:00:00.000Z",
-      password: "hashed-password",
     });
 
     const req = {
-      body: {
-        username: "john",
-        email: "john@example.com",
-        password: "password123",
-      },
+      body: { username: "newname" },
+      params: { id: "507f1f77bcf86cd799439011" },
     };
     const res = createMockRes();
 
-    await createUser(req, res);
+    await updateUser(req, res);
 
-    expect(bcryptMocks.hashSync).toHaveBeenCalledWith("password123", "salt");
-    expect(repositoryMocks.createUser).toHaveBeenCalledWith(
-      "john",
-      "john@example.com",
-      "hashed-password",
+    expect(repositoryMocks.updateUserById).toHaveBeenCalledWith(
+      "507f1f77bcf86cd799439011",
+      { username: "newname" },
     );
-    expect(res.statusCode).toBe(201);
-    expect(res.body.data).toEqual({
-      id: "abc123",
+    expect(res.statusCode).toBe(200);
+    expect(res.body.message).toBe(
+      "Updated data for user 507f1f77bcf86cd799439011",
+    );
+  });
+
+  it("updateUserPrivilege syncs Firebase claim when role changes", async () => {
+    repositoryMocks.findUserById.mockResolvedValueOnce({
+      id: "507f1f77bcf86cd799439011",
+      firebaseuuid: "firebase-uid-1",
+    });
+    repositoryMocks.updateUserPrivilegeById.mockResolvedValueOnce({
+      id: "507f1f77bcf86cd799439011",
       username: "john",
       email: "john@example.com",
-      role: "user",
+      role: "admin",
       createdAt: "2026-01-01T00:00:00.000Z",
     });
+    setUserRoleClaimMock.mockResolvedValueOnce();
+
+    const req = {
+      body: { role: "admin" },
+      params: { id: "507f1f77bcf86cd799439011" },
+    };
+    const res = createMockRes();
+
+    await updateUserPrivilege(req, res);
+
+    expect(setUserRoleClaimMock).toHaveBeenCalledWith(
+      "firebase-uid-1",
+      "admin",
+    );
+    expect(res.statusCode).toBe(200);
   });
 });
