@@ -5,12 +5,20 @@ import motor.motor_asyncio
 from typing import Optional, List
 from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, Field, field_validator
 from pymongo import ReturnDocument
 from pymongo.errors import PyMongoError
 
 app = FastAPI(title="PeerPrep Question Service")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -164,6 +172,36 @@ async def fetch_question(topics: str, difficulty: str):
     choice = random.choice(results)
     choice["_id"] = str(choice["_id"])
     return choice
+
+
+@app.get("/questions")
+async def list_questions():
+    """Returns all questions in the database."""
+    try:
+        cursor = questions_col.find({})
+        results = await cursor.to_list(length=500)
+    except PyMongoError as exc:
+        logger.error("MongoDB query failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Database unavailable, please retry later") from exc
+
+    for r in results:
+        r["_id"] = str(r["_id"])
+    return results
+
+
+@app.get("/questions/{title}")
+async def get_question_by_title(title: str):
+    """Returns a single question by its exact title."""
+    try:
+        doc = await questions_col.find_one({"title": title})
+    except PyMongoError as exc:
+        logger.error("MongoDB query failed for '%s': %s", title, exc)
+        raise HTTPException(status_code=503, detail="Database unavailable, please retry later") from exc
+
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"Question '{title}' not found")
+    doc["_id"] = str(doc["_id"])
+    return doc
 
 
 @app.get("/health")

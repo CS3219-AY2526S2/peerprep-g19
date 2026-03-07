@@ -275,6 +275,88 @@ class TestFetch:
             response = await client.get("/fetch?topics=Arrays&difficulty=Easy", headers=auth_headers)
         assert response.status_code == 503
 
+class TestListQuestions:
+    @pytest.mark.asyncio
+    async def test_returns_empty_list(self, client):
+        with patch("main.questions_col") as mock_col:
+            mock_cursor = MagicMock()
+            mock_cursor.to_list = AsyncMock(return_value=[])
+            mock_col.find = MagicMock(return_value=mock_cursor)
+            response = await client.get("/questions")
+        assert response.status_code == 200
+        assert response.json() == []
+
+    @pytest.mark.asyncio
+    async def test_returns_all_questions(self, client):
+        mock_data = [
+            {"_id": "id1", "title": "Two Sum", "topics": ["Arrays"], "difficulty": "Easy"},
+            {"_id": "id2", "title": "Course Schedule", "topics": ["Graphs"], "difficulty": "Medium"},
+        ]
+        with patch("main.questions_col") as mock_col:
+            mock_cursor = MagicMock()
+            mock_cursor.to_list = AsyncMock(return_value=mock_data)
+            mock_col.find = MagicMock(return_value=mock_cursor)
+            response = await client.get("/questions")
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body) == 2
+        assert body[0]["title"] == "Two Sum"
+        assert body[1]["title"] == "Course Schedule"
+
+    @pytest.mark.asyncio
+    async def test_converts_objectid_to_string(self, client):
+        mock_data = [{"_id": "507f1f77bcf86cd799439011", "title": "Test"}]
+        with patch("main.questions_col") as mock_col:
+            mock_cursor = MagicMock()
+            mock_cursor.to_list = AsyncMock(return_value=mock_data)
+            mock_col.find = MagicMock(return_value=mock_cursor)
+            response = await client.get("/questions")
+        assert isinstance(response.json()[0]["_id"], str)
+
+    @pytest.mark.asyncio
+    async def test_returns_503_on_db_error(self, client):
+        with patch("main.questions_col") as mock_col:
+            mock_cursor = MagicMock()
+            mock_cursor.to_list = AsyncMock(side_effect=PyMongoError("timeout"))
+            mock_col.find = MagicMock(return_value=mock_cursor)
+            response = await client.get("/questions")
+        assert response.status_code == 503
+
+
+class TestGetQuestionByTitle:
+    @pytest.mark.asyncio
+    async def test_returns_question_by_title(self, client):
+        mock_doc = {"_id": "id1", "title": "Two Sum", "topics": ["Arrays"], "difficulty": "Easy", "description": "desc"}
+        with patch("main.questions_col") as mock_col:
+            mock_col.find_one = AsyncMock(return_value=mock_doc)
+            response = await client.get("/questions/Two%20Sum")
+        assert response.status_code == 200
+        assert response.json()["title"] == "Two Sum"
+        assert response.json()["description"] == "desc"
+
+    @pytest.mark.asyncio
+    async def test_returns_404_for_missing_title(self, client):
+        with patch("main.questions_col") as mock_col:
+            mock_col.find_one = AsyncMock(return_value=None)
+            response = await client.get("/questions/NonExistent")
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_converts_objectid_to_string(self, client):
+        mock_doc = {"_id": "507f1f77bcf86cd799439011", "title": "Test"}
+        with patch("main.questions_col") as mock_col:
+            mock_col.find_one = AsyncMock(return_value=mock_doc)
+            response = await client.get("/questions/Test")
+        assert isinstance(response.json()["_id"], str)
+
+    @pytest.mark.asyncio
+    async def test_returns_503_on_db_error(self, client):
+        with patch("main.questions_col") as mock_col:
+            mock_col.find_one = AsyncMock(side_effect=PyMongoError("timeout"))
+            response = await client.get("/questions/Test")
+        assert response.status_code == 503
+
+
 class TestHealth:
     @pytest.mark.asyncio
     async def test_returns_ok_when_db_reachable(self, client):
