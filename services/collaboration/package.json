@@ -1,0 +1,21 @@
+{
+  "name": "collaboration",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx partykit dev",
+    "deploy": "npx partykit deploy",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "y-partykit": "^0.0.33",
+    "yjs": "^13.6.29"
+  },
+  "devDependencies": {
+    "partykit": "^0.0.111",
+    "typescript": "^5.4.0",
+    "vitest": "^3.2.0"
+  }
+}
