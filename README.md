@@ -14,20 +14,35 @@ PeerPrep is a technical interview preparation platform and peer matching system.
 ## Architecture
 PeerPrep is built using a **microservices architecture**. The system consists of the following key services:
 
-### 1. User Service
-Responsible for managing user profiles and role-based access controls within the application.
+### Frontend Service (`/services/frontend/`)
+- **Technology**: Next.js 15 (App Router)
+- **Port**: 3000
+- **Purpose**: User interface for the entire application
+- **Features**: User authentication, matching interface, real-time collaborative coding environment, admin dashboard
 
-### 2. Matching Service
-Handles the logic for finding and pairing users based on selected criteria (e.g., question topics, difficulty levels).
+### User Service (`/services/user-service/`)
+- **Technology**: Node.js with MongoDB
+- **Port**: 3001
+- **Purpose**: User management and authentication
+- **Features**: User registration/login with JWT, role-based access control, profile management
 
-### 3. Question Service
-Maintains the repository of interview questions, indexed by difficulty and topic. It handles the retrieval of questions for interview sessions.
+### Question Service (`/services/question-service/`)
+- **Technology**: FastAPI (Python) with MongoDB Atlas
+- **Port**: 8000
+- **Purpose**: Question repository management
+- **Features**: Question CRUD operations, topic/difficulty indexing, model answers and hints
 
-### 4. Collaboration Service
-Provides the infrastructure for real-time collaboration, enabling concurrent code editing between matched users.
+### Matching Service (`/services/matching-service/`)
+- **Technology**: Node.js with Redis and SSE
+- **Port**: 3002
+- **Purpose**: Real-time user matching based on preferences
+- **Features**: Queue-based matching, Server-Sent Events for updates, timeout handling
 
-### 5. Frontend Service
-The user interface for the application, designed for desktop/laptop screens (13-inch+).
+### Collaboration Service (`/services/collaboration/`)
+- **Technology**: PartyKit with Yjs CRDT
+- **Port**: 1999
+- **Purpose**: Real-time collaborative code editing
+- **Features**: Real-time code synchronization, multi-language support, session management
 
 ## Deployment
 The application is containerized and designed to be deployed on a local machine.
@@ -45,7 +60,7 @@ Before you begin, ensure you have the following installed:
 3.  **pnpm**: Required for the Frontend service. Install via `npm install -g pnpm`.
 4.  **MongoDB Atlas Account**: A cloud-hosted MongoDB is required for the User and Question services.
 
-> **⚠️ Network Warning:** MongoDB Atlas connections are often blocked on restricted networks (e.g., university Wi-Fi). If you encounter connection issues, try using a different network like a personal hotspot.
+> ** Network Warning:** MongoDB Atlas connections are often blocked on restricted networks (e.g., university Wi-Fi). If you encounter connection issues, try using a different network like a personal hotspot.
 
 ### 1. Database Setup (MongoDB)
 
@@ -63,10 +78,10 @@ Handles user accounts, authentication, and profiles.
     ```bash
     cd services/user-service
     ```
-2.  Create a `.env` file from the sample and add your database URI:
+2.  Create a `.env` file from the sample and configure your settings:
     ```bash
     cp .env.sample .env
-    # Now, open .env and set DB_CLOUD_URI to your MongoDB connection string.
+    # Edit .env to set DB_CLOUD_URI/DB_LOCAL_URI and JWT_SECRET
     ```
 3.  Install dependencies and start the service:
     ```bash
@@ -106,7 +121,26 @@ Provides real-time collaboration features using PartyKit.
     npm run dev
     ```
 
-### 5. Frontend Service (Port: 3000)
+### 5. Matching Service (Port: 3002)
+
+Handles user matching and queue management with Redis.
+
+1.  Navigate to the service directory:
+    ```bash
+    cd services/matching-service
+    ```
+2.  Create a `.env` file from the sample and configure your settings:
+    ```bash
+    cp .env.example .env
+    # Edit .env to set REDIS_URL, USER_SERVICE_URL, and other configuration
+    ```
+3.  Install dependencies and start the service:
+    ```bash
+    npm install
+    npm run dev
+    ```
+
+### 6. Frontend Service (Port: 3000)
 
 The main user interface for the application.
 
@@ -127,7 +161,7 @@ The main user interface for the application.
     pnpm dev
     ```
 
-### 6. Verification
+### 7. Verification
 
 Once all services are running, open your browser and navigate to **http://localhost:3000**. You should be able to register, log in, and view questions.
 
