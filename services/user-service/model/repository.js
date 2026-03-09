@@ -11,12 +11,16 @@ export async function connectToDB() {
   await connect(mongoDBUri);
 }
 
-export async function createUser(username, email, password) {
-  return new UserModel({ username, email, password }).save();
+export async function createUser(userData) {
+  return new UserModel(userData).save();
 }
 
 export async function findUserByEmail(email) {
   return UserModel.findOne({ email });
+}
+
+export async function findUserByFirebaseUuid(firebaseuuid) {
+  return UserModel.findOne({ firebaseuuid });
 }
 
 export async function findUserById(userId) {
@@ -29,10 +33,7 @@ export async function findUserByUsername(username) {
 
 export async function findUserByUsernameOrEmail(username, email) {
   return UserModel.findOne({
-    $or: [
-      { username },
-      { email },
-    ],
+    $or: [{ username }, { email }],
   });
 }
 
@@ -40,17 +41,13 @@ export async function findAllUsers() {
   return UserModel.find();
 }
 
-export async function updateUserById(userId, username, email, password) {
+export async function updateUserById(userId, updates) {
   return UserModel.findByIdAndUpdate(
     userId,
     {
-      $set: {
-        username,
-        email,
-        password,
-      },
+      $set: updates,
     },
-    { new: true },  // return the updated user
+    { new: true }, // return the updated user
   );
 }
 
@@ -62,7 +59,7 @@ export async function updateUserPrivilegeById(userId, role) {
         role,
       },
     },
-    { new: true },  // return the updated user
+    { new: true }, // return the updated user
   );
 }
 
