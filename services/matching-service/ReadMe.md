@@ -35,6 +35,11 @@ brew install redis
 brew services start redis
 ```
 
+Alternatively, start in the foreground (for testing):
+```bash
+redis-server
+```
+
 **Linux (Ubuntu):**
 
 ```bash
@@ -88,8 +93,24 @@ MATCHING_TIMEOUT_MS=60000
 | REDIS_URL           | Redis connection URL (e.g., `redis://localhost:6379`)    |
 | USER_SERVICE_URL    | URL of the User Service for JWT verification             |
 | MATCHING_TIMEOUT_MS | Max time (ms) a user can wait in queue before timing out |
+| WITH_AUTH           | Enable/disable authentication (default `true`)           |
 
 > All variables are loaded from `.env` via [`dotenv`](https://www.npmjs.com/package/dotenv).
+
+### Authentication Configuration
+
+The `WITH_AUTH` environment variable controls whether authentication is required:
+
+- **`WITH_AUTH=true`** (default): Requires valid JWT tokens for all endpoints
+- **`WITH_AUTH=false`**: Bypasses authentication and uses default test user (`test@gmail.com`)
+
+When `WITH_AUTH=false`, the service will:
+- Skip JWT token verification
+- Use a default test user with email `test@gmail.com` and username `test`
+- Allow testing without setting up the User Service
+- Enable single-user testing (all requests appear to come from the same user)
+
+**Note:** When using `WITH_AUTH=false`, only one test user is available, so you cannot test multi-user scenarios. This is intended for development and testing purposes only.
 
 ---
 

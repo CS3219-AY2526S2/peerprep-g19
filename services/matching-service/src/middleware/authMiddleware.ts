@@ -2,12 +2,22 @@ import { Request, Response, NextFunction } from "express";
 import axios from "axios";
 
 const USER_SERVICE_URL = process.env.USER_SERVICE_URL || "http://localhost:3001";
+const WITH_AUTH = process.env.WITH_AUTH !== "false";
 
 export async function authenticate(
  req: Request,
  res: Response,
  next: NextFunction
 ) {
+ // If authentication is disabled, use default test user
+ if (!WITH_AUTH) {
+  (req as any).user = { 
+   email: "test@gmail.com", 
+   username: "test" 
+  };
+  return next();
+ }
+
  try {
   const authHeader = req.headers.authorization;
 
