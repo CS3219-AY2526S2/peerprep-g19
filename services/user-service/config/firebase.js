@@ -1,9 +1,6 @@
 import "dotenv/config";
 import admin from "firebase-admin";
-import { createRequire } from "module";
-
-const require = createRequire(import.meta.url);
-const serviceAccount = require("./service_key.json");
+import serviceAccount from "./service_key.json" assert { type: "json" };
 
 if (!admin.apps.length) {
   admin.initializeApp({
