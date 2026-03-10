@@ -3,11 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { register } from "@/lib/api/user";
+import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/components/ui/toast";
-import { ApiError } from "@/lib/api/client";
 
 function PasswordCheck({ label, met }: { label: string; met: boolean }) {
   return (
@@ -19,7 +17,7 @@ function PasswordCheck({ label, met }: { label: string; met: boolean }) {
 
 export function RegisterPage() {
   const router = useRouter();
-  const { toast } = useToast();
+  const { register } = useAuth();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -46,14 +44,9 @@ export function RegisterPage() {
     setError("");
     try {
       await register(username, email, password);
-      toast("Account created! Please sign in.", "success");
-      router.push("/login");
+      router.push("/match");
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("An unexpected error occurred");
-      }
+      setError(err instanceof Error ? err.message : "An unexpected error occurred");
     } finally {
       setLoading(false);
     }

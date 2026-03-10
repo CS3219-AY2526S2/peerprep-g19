@@ -4,9 +4,9 @@ export function getToken(): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
-export function setToken(token: string, keepSignedIn: boolean) {
-  const maxAge = keepSignedIn ? 86400 : ""; // 1 day or session cookie
-  document.cookie = `token=${encodeURIComponent(token)}; path=/; SameSite=Lax${maxAge ? `; max-age=${maxAge}` : ""}`;
+export function setToken(token: string) {
+  // Firebase ID tokens expire after ~1 hour; refreshed by onIdTokenChanged
+  document.cookie = `token=${encodeURIComponent(token)}; path=/; SameSite=Lax; max-age=3600`;
 }
 
 export function clearToken() {
