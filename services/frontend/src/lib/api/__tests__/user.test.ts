@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { login, register, verifyToken, getUser, getAllUsers, updateUser, updateUserPrivilege, deleteUser } from "../user";
+import { registerUser, getUser, getAllUsers, updateUser, updateUserPrivilege, deleteUser } from "../user";
 
-// Mock the client module
 vi.mock("../client", () => ({
   apiFetch: vi.fn(),
 }));
@@ -14,37 +13,15 @@ describe("user API", () => {
     vi.clearAllMocks();
   });
 
-  describe("login", () => {
-    it("calls POST /api/auth/login with email and password", async () => {
-      const mockResponse = { message: "ok", data: { accessToken: "tok", id: "1", username: "u", email: "e@e.com", role: "user", createdAt: "" } };
-      mockApiFetch.mockResolvedValue(mockResponse);
-
-      const result = await login("e@e.com", "pass");
-      expect(mockApiFetch).toHaveBeenCalledWith("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email: "e@e.com", password: "pass" }),
-      });
-      expect(result).toEqual(mockResponse);
-    });
-  });
-
-  describe("register", () => {
-    it("calls POST /api/users with user data", async () => {
+  describe("registerUser", () => {
+    it("calls POST /api/auth/register with username", async () => {
       mockApiFetch.mockResolvedValue({ message: "ok", data: {} });
 
-      await register("user1", "u@e.com", "pw");
-      expect(mockApiFetch).toHaveBeenCalledWith("/api/users", {
+      await registerUser("alice");
+      expect(mockApiFetch).toHaveBeenCalledWith("/api/auth/register", {
         method: "POST",
-        body: JSON.stringify({ username: "user1", email: "u@e.com", password: "pw" }),
+        body: JSON.stringify({ username: "alice" }),
       });
-    });
-  });
-
-  describe("verifyToken", () => {
-    it("calls GET /api/auth/verify-token", async () => {
-      mockApiFetch.mockResolvedValue({ message: "ok", data: {} });
-      await verifyToken();
-      expect(mockApiFetch).toHaveBeenCalledWith("/api/auth/verify-token");
     });
   });
 

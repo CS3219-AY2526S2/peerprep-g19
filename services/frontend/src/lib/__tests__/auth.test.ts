@@ -34,22 +34,22 @@ describe("auth", () => {
   });
 
   describe("setToken", () => {
-    it("sets a session cookie when keepSignedIn is false", () => {
-      setToken("tok123", false);
+    it("sets a cookie with the token value", () => {
+      setToken("tok123");
       expect(getToken()).toBe("tok123");
-      // Session cookies should not have max-age
       expect(document.cookie).toContain("token=tok123");
     });
 
-    it("sets a persistent cookie when keepSignedIn is true", () => {
-      setToken("tok456", true);
-      expect(getToken()).toBe("tok456");
+    it("overwrites an existing token", () => {
+      setToken("old");
+      setToken("new");
+      expect(getToken()).toBe("new");
     });
   });
 
   describe("clearToken", () => {
     it("removes the token cookie", () => {
-      setToken("remove-me", false);
+      setToken("remove-me");
       expect(getToken()).toBe("remove-me");
       clearToken();
       expect(getToken()).toBeNull();
