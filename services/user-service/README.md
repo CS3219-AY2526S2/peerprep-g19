@@ -8,24 +8,26 @@
 
 1. Set up a MongoDB Cluster by following the steps in this **[guide](./MongoDBSetup.md)**.
 
-2. After setting up, go to the **[Clusters](https://cloud.mongodb.com/go?l=https%3A%2F%2Fcloud.mongodb.com%2Fv2%2F%3Cproject%3E%23%2Fclusters)**  Page. You would see a list of the clusters you have set up. Select `Connect` on the cluster you just created earlier on for User Service.
+2. Set up Firebase Admin for backend authentication/authorization by following this **[guide](./FirebaseSetup.md)**.
+
+3. After setting up, go to the **[Clusters](https://cloud.mongodb.com/go?l=https%3A%2F%2Fcloud.mongodb.com%2Fv2%2F%3Cproject%3E%23%2Fclusters)**  Page. You would see a list of the clusters you have set up. Select `Connect` on the cluster you just created earlier on for User Service.
 
     ![alt text](./GuideAssets/ConnectCluster.png)
 
-3. Select the `Drivers` option, as we have to link to a Node.js App (User Service).
+4. Select the `Drivers` option, as we have to link to a Node.js App (User Service).
 
     ![alt text](./GuideAssets/DriverSelection.png)
 
-4. Select `Node.js` in the **Driver** dropdown menu.
-5. Copy the connection string.
+5. Select `Node.js` in the **Driver** dropdown menu.
+6. Copy the connection string.
 
     > Note, you may see `<password>` in this connection string. We will be replacing this with the admin account password that we created earlier on when setting up the Cluster.
 
     ![alt text](./GuideAssets/ConnectionString.png)
 
-6. In the `user-service` directory, create a copy of the `.env.sample` file and name it `.env`.
+7. In the `user-service` directory, create a copy of the `.env.sample` file and name it `.env`.
 
-7. Update the `DB_CLOUD_URI` of the `.env` file, and paste the string we copied earlier in **step 5**. Also remember to replace the `<db_password>` placeholder with the **actual password**.
+8. Update the `DB_CLOUD_URI` of the `.env` file, and paste the string we copied earlier in **step 6**. Also remember to replace the `<db_password>` placeholder with the **actual password**.
 
 > ⚠️ Warning: If the password contains special characters, make sure to URL-encode them before placing them in the connection string. For example, if your password is `P@ssword`, you should replace `@` with `%40`, resulting in `P%40ssword`.
 
