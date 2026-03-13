@@ -8,24 +8,26 @@
 
 1. Set up a MongoDB Cluster by following the steps in this **[guide](./MongoDBSetup.md)**.
 
-2. After setting up, go to the **[Clusters](https://cloud.mongodb.com/go?l=https%3A%2F%2Fcloud.mongodb.com%2Fv2%2F%3Cproject%3E%23%2Fclusters)**  Page. You would see a list of the clusters you have set up. Select `Connect` on the cluster you just created earlier on for User Service.
+2. Set up Firebase Admin for backend authentication/authorization by following this **[guide](./FirebaseSetup.md)**.
+
+3. After setting up, go to the **[Clusters](https://cloud.mongodb.com/go?l=https%3A%2F%2Fcloud.mongodb.com%2Fv2%2F%3Cproject%3E%23%2Fclusters)**  Page. You would see a list of the clusters you have set up. Select `Connect` on the cluster you just created earlier on for User Service.
 
     ![alt text](./GuideAssets/ConnectCluster.png)
 
-3. Select the `Drivers` option, as we have to link to a Node.js App (User Service).
+4. Select the `Drivers` option, as we have to link to a Node.js App (User Service).
 
     ![alt text](./GuideAssets/DriverSelection.png)
 
-4. Select `Node.js` in the **Driver** dropdown menu.
-5. Copy the connection string.
+5. Select `Node.js` in the **Driver** dropdown menu.
+6. Copy the connection string.
 
     > Note, you may see `<password>` in this connection string. We will be replacing this with the admin account password that we created earlier on when setting up the Cluster.
 
     ![alt text](./GuideAssets/ConnectionString.png)
 
-6. In the `user-service` directory, create a copy of the `.env.sample` file and name it `.env`.
+7. In the `user-service` directory, create a copy of the `.env.sample` file and name it `.env`.
 
-7. Update the `DB_CLOUD_URI` of the `.env` file, and paste the string we copied earlier in **step 5**. Also remember to replace the `<db_password>` placeholder with the **actual password**.
+8. Update the `DB_CLOUD_URI` of the `.env` file, and paste the string we copied earlier in **step 6**. Also remember to replace the `<db_password>` placeholder with the **actual password**.
 
 8. Ensure the `JWT_SECRET` variable is set in the `.env` file. This is required for generating authentication tokens during login. You can set it to any random string (e.g., `JWT_SECRET=your_secret_key_here`).
 
@@ -63,121 +65,74 @@
 
 ## User Service API Guide
 
-### Create User
+This service currently uses Firebase ID tokens for authentication. It does not issue local JWTs.
 
-- This endpoint allows adding a new user to the database (i.e., user registration).
+For protected routes, include:
 
+`Authorization: Bearer <FIREBASE_ID_TOKEN>`
+
+### Register User Profile
+
+- Purpose: Create a user profile in MongoDB using an already-authenticated Firebase user.
 - HTTP Method: `POST`
-
-- Endpoint: <http://localhost:3001/users>
-
-- Body
-  - Required: `username` (string), `email` (string), `password` (string)
-
-    ```json
-    {
-      "username": "SampleUserName",
-      "email": "sample@gmail.com",
-      "password": "SecurePassword"
-    }
-    ```
-
-- Responses:
-
-    | Response Code               | Explanation                                           |
-    |-----------------------------|-------------------------------------------------------|
-    | 201 (Created)               | User created successfully, created user data returned |
-    | 400 (Bad Request)           | Missing fields                                        |
-    | 409 (Conflict)              | Duplicate username or email encountered               |
-    | 500 (Internal Server Error) | Database or server error                              |
-
-### Login
-
-- This endpoint allows a user to authenticate with an email and password and returns a JWT access token. The token is valid for 1 day and can be used subsequently to access protected resources. For the example usage, refer to the [Authorization header section in the Get User endpoint](#auth-header).
-- HTTP Method: `POST`
-- Endpoint: <http://localhost:3001/auth/login>
-- Body
-  - Required: `email` (string), `password` (string)
-
-    ```json
-    {
-      "email": "sample@gmail.com",
-      "password": "SecurePassword"
-    }
-    ```
-
-- Responses:
-
-    | Response Code               | Explanation                                        |
-    |-----------------------------|----------------------------------------------------|
-    | 200 (OK)                    | Login successful, JWT token and user data returned |
-    | 400 (Bad Request)           | Missing fields                                     |
-    | 401 (Unauthorized)          | Incorrect email or password                        |
-    | 500 (Internal Server Error) | Database or server error                           |
-
-### Verify Token
-
-- This endpoint allows one to verify a JWT access token to authenticate and retrieve the user's data associated with the token.
-- HTTP Method: `GET`
-- Endpoint: <http://localhost:3001/auth/verify-token>
+- Endpoint: <http://localhost:3001/auth/register>
 - Headers
-  - Required: `Authorization: Bearer <JWT_ACCESS_TOKEN>`
+  - Required: `Authorization: Bearer <FIREBASE_ID_TOKEN>`
+- Body
+  - Optional: `username` (string), `name` (string)
+
+    ```json
+    {
+      "username": "sampleUser"
+    }
+    ```
+
+- Behavior:
+  - If user does not exist in MongoDB: creates user with role `user`, returns `201`.
+  - If user already exists: returns existing user, `200`.
+  - On first registration, Firebase custom claim `role: "user"` is set.
 
 - Responses:
 
-    | Response Code               | Explanation                                        |
-    |-----------------------------|----------------------------------------------------|
-    | 200 (OK)                    | Token verified, authenticated user's data returned |
-    | 401 (Unauthorized)          | Missing/invalid/expired JWT                        |
-    | 500 (Internal Server Error) | Database or server error                           |
+    | Response Code               | Explanation                                  |
+    |-----------------------------|----------------------------------------------|
+    | 201 (Created)               | User registered in MongoDB                   |
+    | 200 (OK)                    | User already registered                      |
+    | 401 (Unauthorized)          | Missing/invalid Firebase ID token            |
+    | 500 (Internal Server Error) | Firebase/database/server error               |
 
 ### Update User Privilege
 
-> You may need to manually assign admin status to the first user by directly editing the database document before using this endpoint.
->
-> To do this on Atlas, navigate to **Database > Data Explorer > cluster_name > test > usermodels**
->
-> ![alt text](./GuideAssets/AdminUser.png)
->
-> Find the user document, and set the `isAdmin` field to `true`.
->
-> ![alt text](./GuideAssets/SetAdmin.png)
+You need an admin token to use this endpoint.
 
-- This endpoint allows updating a user’s privilege, i.e., promoting or demoting them from admin status.
-
+- Purpose: Update role in MongoDB and sync Firebase custom claim.
 - HTTP Method: `PATCH`
-
-- Endpoint: <http://localhost:3001/users/{userId}>
-
+- Endpoint: <http://localhost:3001/users/{userId}/privilege>
 - Parameters
-  - Required: `userId` path parameter
-
+  - Required: `userId` (MongoDB Object ID)
+- Headers
+  - Required: `Authorization: Bearer <FIREBASE_ID_TOKEN>`
+  - Auth Rule: Admin users only
 - Body
-  - Required: `isAdmin` (boolean)
+  - Required: `role` (string)
+  - Allowed values: `"admin"`, `"user"`
 
     ```json
     {
-      "isAdmin": true
+      "role": "admin"
     }
     ```
 
-- Headers
-  - Required: `Authorization: Bearer <JWT_ACCESS_TOKEN>`
-  - Auth Rules:
-
-    - Admin users: Can update any user's privilege. The server verifies the user associated with the JWT token is an admin user and allows the privilege update.
-    - Non-admin users: Not allowed access.
-
 - Responses:
 
-    | Response Code               | Explanation                                                     |
-    |-----------------------------|-----------------------------------------------------------------|
-    | 200 (OK)                    | User privilege updated successfully, updated user data returned |
-    | 400 (Bad Request)           | Missing fields                                                  |
-    | 401 (Unauthorized)          | Access denied due to missing/invalid/expired JWT                |
-    | 403 (Forbidden)             | Access denied for non-admin users                               |
-    | 404 (Not Found)             | User with the specified ID not found                            |
-    | 500 (Internal Server Error) | Database or server error                                        |
+    | Response Code               | Explanation                                  |
+    |-----------------------------|----------------------------------------------|
+    | 200 (OK)                    | Role updated in MongoDB and Firebase claim   |
+    | 400 (Bad Request)           | Missing/invalid role                         |
+    | 401 (Unauthorized)          | Missing/invalid Firebase ID token            |
+    | 403 (Forbidden)             | Caller is not admin                          |
+    | 404 (Not Found)             | User not found                               |
+    | 500 (Internal Server Error) | Database/server error                        |
 
 ### Get User
 
@@ -195,22 +150,22 @@
 
 - Headers
 
-  - Required: `Authorization: Bearer <JWT_ACCESS_TOKEN>`
+  - Required: `Authorization: Bearer <FIREBASE_ID_TOKEN>`
 
-  - Explanation: This endpoint requires the client to include a JWT (JSON Web Token) in the HTTP request header for authentication and authorization. This token is generated during the authentication process (i.e., login) and contains information about the user's identity. The server verifies this token to ensure that the client is authorized to access the data.
+  - Explanation: This endpoint requires a Firebase ID token in the request header for authentication and authorization. The server verifies this token with Firebase Admin SDK.
 
   - Auth Rules:
 
-    - Admin users: Can retrieve any user's data. The server verifies the user associated with the JWT token is an admin user and allows access to the requested user's data.
+    - Admin users: Can retrieve any user's data. The server verifies the user associated with the Firebase token is an admin user and allows access to the requested user's data.
 
-    - Non-admin users: Can only retrieve their own data. The server checks if the user ID in the request URL matches the ID of the user associated with the JWT token. If it matches, the server returns the user's own data.
+    - Non-admin users: Can only retrieve their own data. The server checks if the user ID in the request URL matches the ID of the user associated with the Firebase token. If it matches, the server returns the user's own data.
 
 - Responses:
 
     | Response Code               | Explanation                                              |
     |-----------------------------|----------------------------------------------------------|
     | 200 (OK)                    | Success, user data returned                              |
-    | 401 (Unauthorized)          | Access denied due to missing/invalid/expired JWT         |
+    | 401 (Unauthorized)          | Access denied due to missing/invalid/expired token       |
     | 403 (Forbidden)             | Access denied for non-admin users accessing others' data |
     | 404 (Not Found)             | User with the specified ID not found                     |
     | 500 (Internal Server Error) | Database or server error                                 |
@@ -221,10 +176,10 @@
 - HTTP Method: `GET`
 - Endpoint: <http://localhost:3001/users>
 - Headers
-  - Required: `Authorization: Bearer <JWT_ACCESS_TOKEN>`
+  - Required: `Authorization: Bearer <FIREBASE_ID_TOKEN>`
   - Auth Rules:
 
-    - Admin users: Can retrieve all users' data. The server verifies the user associated with the JWT token is an admin user and allows access to all users' data.
+    - Admin users: Can retrieve all users' data. The server verifies the user associated with the Firebase token is an admin user and allows access to all users' data.
 
     - Non-admin users: Not allowed access.
 
@@ -233,7 +188,7 @@
     | Response Code               | Explanation                                      |
     |-----------------------------|--------------------------------------------------|
     | 200 (OK)                    | Success, all user data returned                  |
-    | 401 (Unauthorized)          | Access denied due to missing/invalid/expired JWT |
+    | 401 (Unauthorized)          | Access denied due to missing/invalid/expired token |
     | 403 (Forbidden)             | Access denied for non-admin users                |
     | 500 (Internal Server Error) | Database or server error                         |
 
@@ -249,59 +204,56 @@
   - Required: `userId` path parameter
 
 - Body
-  - At least one of the following fields is required: `username` (string), `email` (string), `password` (string)
+  - Required: `username` (string)
 
     ```json
     {
-      "username": "SampleUserName",
-      "email": "sample@gmail.com",
-      "password": "SecurePassword"
+      "username": "SampleUserName"
     }
     ```
 
 - Headers
-  - Required: `Authorization: Bearer <JWT_ACCESS_TOKEN>`
+  - Required: `Authorization: Bearer <FIREBASE_ID_TOKEN>`
   - Auth Rules:
 
-    - Admin users: Can update any user's data. The server verifies the user associated with the JWT token is an admin user and allows the update of requested user's data.
+    - Admin users: Can update any user's data. The server verifies the user associated with the Firebase token is an admin user and allows the update of requested user's data.
 
-    - Non-admin users: Can only update their own data. The server checks if the user ID in the request URL matches the ID of the user associated with the JWT token. If it matches, the server updates the user's own data.
+    - Non-admin users: Can only update their own data. The server checks if the user ID in the request URL matches the ID of the user associated with the Firebase token. If it matches, the server updates the user's own data.
 
 - Responses:
 
     | Response Code               | Explanation                                             |
     |-----------------------------|---------------------------------------------------------|
     | 200 (OK)                    | User updated successfully, updated user data returned   |
-    | 400 (Bad Request)           | Missing fields                                          |
-    | 401 (Unauthorized)          | Access denied due to missing/invalid/expired JWT        |
+    | 400 (Bad Request)           | Missing username or duplicate username                  |
+    | 401 (Unauthorized)          | Access denied due to missing/invalid/expired token      |
     | 403 (Forbidden)             | Access denied for non-admin users updating others' data |
     | 404 (Not Found)             | User with the specified ID not found                    |
-    | 409 (Conflict)              | Duplicate username or email encountered                 |
     | 500 (Internal Server Error) | Database or server error                                |
 
 ### Delete User
 
 - This endpoint allows deletion of a user and their related data from the database using the user's ID.
 - HTTP Method: `DELETE`
-- Endpoint: http://localhost:3001/users/{userId}
+- Endpoint: <http://localhost:3001/users/{userId}>
 - Parameters
 
   - Required: `userId` path parameter
 - Headers
 
-  - Required: `Authorization: Bearer <JWT_ACCESS_TOKEN>`
+  - Required: `Authorization: Bearer <FIREBASE_ID_TOKEN>`
 
   - Auth Rules:
 
-    - Admin users: Can delete any user's data. The server verifies the user associated with the JWT token is an admin user and allows the deletion of requested user's data.
+    - Admin users: Can delete any user's data. The server verifies the user associated with the Firebase token is an admin user and allows the deletion of requested user's data.
 
-    - Non-admin users: Can only delete their own data. The server checks if the user ID in the request URL matches the ID of the user associated with the JWT token. If it matches, the server deletes the user's own data.
+    - Non-admin users: Can only delete their own data. The server checks if the user ID in the request URL matches the ID of the user associated with the Firebase token. If it matches, the server deletes the user's own data.
 - Responses:
 
     | Response Code               | Explanation                                             |
     |-----------------------------|---------------------------------------------------------|
     | 200 (OK)                    | User deleted successfully                               |
-    | 401 (Unauthorized)          | Access denied due to missing/invalid/expired JWT        |
+    | 401 (Unauthorized)          | Access denied due to missing/invalid/expired token      |
     | 403 (Forbidden)             | Access denied for non-admin users deleting others' data |
     | 404 (Not Found)             | User with the specified ID not found                    |
     | 500 (Internal Server Error) | Database or server error                                |
