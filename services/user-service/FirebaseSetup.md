@@ -8,6 +8,7 @@ This guide assumes the project maintainer already created the Firebase project a
 
 1. A Google account.
 2. Access to the Firebase Console: <https://console.firebase.google.com/>.
+3. Node.js `v20.10.0` or newer (required for the `with { type: "json" }` import attributes syntax used in `config/firebase.js`).
 
 ## 1. Join the Existing Firebase Project
 
