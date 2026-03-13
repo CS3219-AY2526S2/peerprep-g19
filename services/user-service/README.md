@@ -29,6 +29,8 @@
 
 8. Update the `DB_CLOUD_URI` of the `.env` file, and paste the string we copied earlier in **step 6**. Also remember to replace the `<db_password>` placeholder with the **actual password**.
 
+8. Ensure the `JWT_SECRET` variable is set in the `.env` file. This is required for generating authentication tokens during login. You can set it to any random string (e.g., `JWT_SECRET=your_secret_key_here`).
+
 > ⚠️ Warning: If the password contains special characters, make sure to URL-encode them before placing them in the connection string. For example, if your password is `P@ssword`, you should replace `@` with `%40`, resulting in `P%40ssword`.
 
 ## Running User Service
@@ -255,4 +257,3 @@ You need an admin token to use this endpoint.
     | 403 (Forbidden)             | Access denied for non-admin users deleting others' data |
     | 404 (Not Found)             | User with the specified ID not found                    |
     | 500 (Internal Server Error) | Database or server error                                |
-
