@@ -8,6 +8,8 @@
 
 1. Set up a MongoDB Cluster by following the steps in this **[guide](./MongoDBSetup.md)**.
 
+    > 💡 If the project maintainer has already set up a shared MongoDB cluster, you can skip this step. Ask the maintainer for the connection string and database credentials instead, then jump straight to **step 7**.
+
 2. Set up Firebase Admin for backend authentication/authorization by following this **[guide](./FirebaseSetup.md)**.
 
 3. After setting up, go to the **[Clusters](https://cloud.mongodb.com/go?l=https%3A%2F%2Fcloud.mongodb.com%2Fv2%2F%3Cproject%3E%23%2Fclusters)**  Page. You would see a list of the clusters you have set up. Select `Connect` on the cluster you just created earlier on for User Service.
@@ -27,11 +29,11 @@
 
 7. In the `user-service` directory, create a copy of the `.env.sample` file and name it `.env`.
 
-8. Update the `DB_CLOUD_URI` of the `.env` file, and paste the string we copied earlier in **step 6**. Also remember to replace the `<db_password>` placeholder with the **actual password**.
+8. Click on the triple dots on User-Service and then on Connect via
 
-8. Ensure the `JWT_SECRET` variable is set in the `.env` file. This is required for generating authentication tokens during login. You can set it to any random string (e.g., `JWT_SECRET=your_secret_key_here`).
+9. Select via Drivers and then copy the link
 
-> ⚠️ Warning: If the password contains special characters, make sure to URL-encode them before placing them in the connection string. For example, if your password is `P@ssword`, you should replace `@` with `%40`, resulting in `P%40ssword`.
+10. Update the `DB_CLOUD_URI` of the `.env` file, and paste the string we copied earlier in **step 6**. Also remember to replace the `<db_username> ` and `<db_password>` placeholder with the **actual username** **actual password**.
 
 ## Running User Service
 
