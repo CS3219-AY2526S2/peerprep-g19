@@ -1,34 +1,56 @@
 import { Response } from "express";
 
-const connections = new Map<string, Response>();
+interface ManagedConnection {
+  res: Response;
+  cleanup?: () => void;
+}
+
+const connections = new Map<string, ManagedConnection>();
 
 export function registerConnection(email: string, res: Response) {
 
   const existing = connections.get(email);
 
   if (existing) {
-    existing.end();
+    existing.cleanup?.();
+    existing.res.end();
   }
 
-  connections.set(email, res);
+  connections.set(email, { res });
+}
+
+/**
+ * Attach a cleanup callback (clears intervals) so that closeConnection()
+ * can stop the per-connection timers created in queueController.
+ */
+export function setCleanup(email: string, fn: () => void) {
+  const conn = connections.get(email);
+  if (conn) conn.cleanup = fn;
+}
+
+/**
+ * Check if a specific Response is still the active connection for this email.
+ */
+export function isActiveConnection(email: string, res: Response): boolean {
+  return connections.get(email)?.res === res;
 }
 
 export function sendEvent(email: string, data: any) {
 
-  const client = connections.get(email);
+  const conn = connections.get(email);
 
-  if (!client) return;
+  if (!conn) return;
 
-  client.write(`data: ${JSON.stringify(data)}\n\n`);
+  conn.res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
 export function closeConnection(email: string) {
 
-  const client = connections.get(email);
+  const conn = connections.get(email);
 
-  if (!client) return;
+  if (!conn) return;
 
-  client.end();
+  conn.cleanup?.();
+  conn.res.end();
   connections.delete(email);
-
 }
