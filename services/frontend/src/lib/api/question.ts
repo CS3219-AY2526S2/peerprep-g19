@@ -1,8 +1,43 @@
 import { apiFetch } from "./client";
 import type { Question, QuestionUpsertRequest } from "@/types/question";
 
-export async function listQuestions(): Promise<Question[]> {
-  return apiFetch<Question[]>("/api/questions-list");
+export interface ListQuestionsParams {
+  skip?: number;
+  limit?: number;
+  search?: string;
+  difficulty?: string;
+  topic?: string;
+}
+
+export interface ListQuestionsResponse {
+  data: Question[];
+  total: number;
+  skip: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+export interface QuestionStats {
+  total: number;
+  difficulty_counts: Record<string, number>;
+  topics: string[];
+}
+
+export async function listQuestions(params: ListQuestionsParams = {}): Promise<ListQuestionsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params.skip != null) searchParams.set("skip", String(params.skip));
+  if (params.limit != null) searchParams.set("limit", String(params.limit));
+  if (params.search) searchParams.set("search", params.search);
+  if (params.difficulty) searchParams.set("difficulty", params.difficulty);
+  if (params.topic) searchParams.set("topic", params.topic);
+
+  const qs = searchParams.toString();
+  const url = qs ? `/api/questions-list?${qs}` : "/api/questions-list";
+  return apiFetch<ListQuestionsResponse>(url);
+}
+
+export async function getQuestionStats(): Promise<QuestionStats> {
+  return apiFetch<QuestionStats>("/api/questions-stats");
 }
 
 export async function getQuestion(title: string): Promise<Question> {
@@ -37,13 +72,11 @@ export async function fetchDeterministicQuestion(
   difficulty: string,
   sessionId: string,
 ): Promise<Question | null> {
-  const all = await listQuestions();
-  const filtered = all
-    .filter((q) => q.topics.includes(topic) && q.difficulty === difficulty)
-    .sort((a, b) => a.title.localeCompare(b.title));
+  const response = await listQuestions({ topic, difficulty, limit: 500 });
+  const sorted = response.data.sort((a, b) => a.title.localeCompare(b.title));
 
-  if (filtered.length === 0) return null;
+  if (sorted.length === 0) return null;
 
-  const index = parseInt(sessionId.slice(0, 8), 16) % filtered.length;
-  return filtered[index];
+  const index = parseInt(sessionId.slice(0, 8), 16) % sorted.length;
+  return sorted[index];
 }

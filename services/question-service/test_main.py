@@ -275,51 +275,228 @@ class TestFetch:
             response = await client.get("/fetch?topics=Arrays&difficulty=Easy", headers=auth_headers)
         assert response.status_code == 503
 
+
+def _mock_find_cursor(data):
+    """Helper: returns a mock cursor that supports .sort().skip().limit().to_list()."""
+    cursor = MagicMock()
+    cursor.sort = MagicMock(return_value=cursor)
+    cursor.skip = MagicMock(return_value=cursor)
+    cursor.limit = MagicMock(return_value=cursor)
+    cursor.to_list = AsyncMock(return_value=data)
+    return cursor
+
+
 class TestListQuestions:
     @pytest.mark.asyncio
-    async def test_returns_empty_list(self, client):
-        with patch("main.questions_col") as mock_col:
-            mock_cursor = MagicMock()
-            mock_cursor.to_list = AsyncMock(return_value=[])
-            mock_col.find = MagicMock(return_value=mock_cursor)
-            response = await client.get("/questions")
-        assert response.status_code == 200
-        assert response.json() == []
-
-    @pytest.mark.asyncio
-    async def test_returns_all_questions(self, client):
+    async def test_returns_paginated_response(self, client):
         mock_data = [
             {"_id": "id1", "title": "Two Sum", "topics": ["Arrays"], "difficulty": "Easy"},
-            {"_id": "id2", "title": "Course Schedule", "topics": ["Graphs"], "difficulty": "Medium"},
         ]
         with patch("main.questions_col") as mock_col:
-            mock_cursor = MagicMock()
-            mock_cursor.to_list = AsyncMock(return_value=mock_data)
-            mock_col.find = MagicMock(return_value=mock_cursor)
+            mock_col.count_documents = AsyncMock(return_value=1)
+            mock_col.find = MagicMock(return_value=_mock_find_cursor(mock_data))
             response = await client.get("/questions")
         assert response.status_code == 200
         body = response.json()
-        assert len(body) == 2
-        assert body[0]["title"] == "Two Sum"
-        assert body[1]["title"] == "Course Schedule"
+        assert body["total"] == 1
+        assert len(body["data"]) == 1
+        assert body["data"][0]["title"] == "Two Sum"
+        assert body["skip"] == 0
+        assert body["limit"] == 20
+        assert body["hasMore"] is False
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_data(self, client):
+        with patch("main.questions_col") as mock_col:
+            mock_col.count_documents = AsyncMock(return_value=0)
+            mock_col.find = MagicMock(return_value=_mock_find_cursor([]))
+            response = await client.get("/questions")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["data"] == []
+        assert body["total"] == 0
 
     @pytest.mark.asyncio
     async def test_converts_objectid_to_string(self, client):
         mock_data = [{"_id": "507f1f77bcf86cd799439011", "title": "Test"}]
         with patch("main.questions_col") as mock_col:
-            mock_cursor = MagicMock()
-            mock_cursor.to_list = AsyncMock(return_value=mock_data)
-            mock_col.find = MagicMock(return_value=mock_cursor)
+            mock_col.count_documents = AsyncMock(return_value=1)
+            mock_col.find = MagicMock(return_value=_mock_find_cursor(mock_data))
             response = await client.get("/questions")
-        assert isinstance(response.json()[0]["_id"], str)
+        assert isinstance(response.json()["data"][0]["_id"], str)
 
     @pytest.mark.asyncio
     async def test_returns_503_on_db_error(self, client):
         with patch("main.questions_col") as mock_col:
-            mock_cursor = MagicMock()
-            mock_cursor.to_list = AsyncMock(side_effect=PyMongoError("timeout"))
-            mock_col.find = MagicMock(return_value=mock_cursor)
+            mock_col.count_documents = AsyncMock(side_effect=PyMongoError("timeout"))
             response = await client.get("/questions")
+        assert response.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_search_filters_by_title(self, client):
+        with patch("main.questions_col") as mock_col:
+            mock_col.count_documents = AsyncMock(return_value=0)
+            mock_col.find = MagicMock(return_value=_mock_find_cursor([]))
+            await client.get("/questions?search=two")
+
+            filter_arg = mock_col.find.call_args[0][0]
+            assert filter_arg["title"] == {"$regex": "two", "$options": "i"}
+
+    @pytest.mark.asyncio
+    async def test_search_escapes_regex_metacharacters(self, client):
+        with patch("main.questions_col") as mock_col:
+            mock_col.count_documents = AsyncMock(return_value=0)
+            mock_col.find = MagicMock(return_value=_mock_find_cursor([]))
+            await client.get("/questions?search=two%2Bsum%28")
+
+            filter_arg = mock_col.find.call_args[0][0]
+            # re.escape("two+sum(") → "two\\+sum\\("
+            assert filter_arg["title"]["$regex"] == "two\\+sum\\("
+
+    @pytest.mark.asyncio
+    async def test_difficulty_filter(self, client):
+        with patch("main.questions_col") as mock_col:
+            mock_col.count_documents = AsyncMock(return_value=0)
+            mock_col.find = MagicMock(return_value=_mock_find_cursor([]))
+            await client.get("/questions?difficulty=Hard")
+
+            filter_arg = mock_col.find.call_args[0][0]
+            assert filter_arg["difficulty"] == "Hard"
+
+    @pytest.mark.asyncio
+    async def test_topic_filter(self, client):
+        with patch("main.questions_col") as mock_col:
+            mock_col.count_documents = AsyncMock(return_value=0)
+            mock_col.find = MagicMock(return_value=_mock_find_cursor([]))
+            await client.get("/questions?topic=Graphs")
+
+            filter_arg = mock_col.find.call_args[0][0]
+            assert filter_arg["topics"] == "Graphs"
+
+    @pytest.mark.asyncio
+    async def test_combined_filters(self, client):
+        with patch("main.questions_col") as mock_col:
+            mock_col.count_documents = AsyncMock(return_value=0)
+            mock_col.find = MagicMock(return_value=_mock_find_cursor([]))
+            await client.get("/questions?search=sum&difficulty=Easy&topic=Arrays")
+
+            filter_arg = mock_col.find.call_args[0][0]
+            assert filter_arg["title"] == {"$regex": "sum", "$options": "i"}  # re.escape("sum") == "sum"
+            assert filter_arg["difficulty"] == "Easy"
+            assert filter_arg["topics"] == "Arrays"
+
+    @pytest.mark.asyncio
+    async def test_invalid_difficulty_returns_400(self, client):
+        response = await client.get("/questions?difficulty=Extreme")
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_total_reflects_filtered_count(self, client):
+        with patch("main.questions_col") as mock_col:
+            mock_col.count_documents = AsyncMock(return_value=5)
+            mock_col.find = MagicMock(return_value=_mock_find_cursor([{"_id": "1", "title": "Q"}]))
+            response = await client.get("/questions?difficulty=Easy")
+
+            # count_documents should receive the same filter as find
+            count_filter = mock_col.count_documents.call_args[0][0]
+            assert count_filter["difficulty"] == "Easy"
+            assert response.json()["total"] == 5
+
+    @pytest.mark.asyncio
+    async def test_has_more_true_when_more_results(self, client):
+        with patch("main.questions_col") as mock_col:
+            mock_col.count_documents = AsyncMock(return_value=25)
+            mock_col.find = MagicMock(return_value=_mock_find_cursor([{"_id": "1", "title": "Q"}]))
+            response = await client.get("/questions?limit=20")
+        assert response.json()["hasMore"] is True
+
+    @pytest.mark.asyncio
+    async def test_skip_and_limit_params(self, client):
+        with patch("main.questions_col") as mock_col:
+            mock_col.count_documents = AsyncMock(return_value=50)
+            cursor_mock = _mock_find_cursor([])
+            mock_col.find = MagicMock(return_value=cursor_mock)
+            response = await client.get("/questions?skip=10&limit=5")
+
+        body = response.json()
+        assert body["skip"] == 10
+        assert body["limit"] == 5
+        cursor_mock.skip.assert_called_with(10)
+        cursor_mock.limit.assert_called_with(5)
+
+
+class TestQuestionStats:
+    @pytest.mark.asyncio
+    async def test_returns_difficulty_breakdown(self, client):
+        facet_result = [{
+            "difficulty_counts": [
+                {"_id": "Easy", "count": 5},
+                {"_id": "Medium", "count": 3},
+                {"_id": "Hard", "count": 2},
+            ],
+            "topics": [
+                {"_id": "Arrays"},
+                {"_id": "Graphs"},
+            ],
+            "total": [{"count": 10}],
+        }]
+        with patch("main.questions_col") as mock_col:
+            mock_cursor = MagicMock()
+            mock_cursor.to_list = AsyncMock(return_value=facet_result)
+            mock_col.aggregate = MagicMock(return_value=mock_cursor)
+            response = await client.get("/questions/stats")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 10
+        assert body["difficulty_counts"]["Easy"] == 5
+        assert body["difficulty_counts"]["Medium"] == 3
+        assert body["difficulty_counts"]["Hard"] == 2
+
+    @pytest.mark.asyncio
+    async def test_returns_sorted_topics(self, client):
+        facet_result = [{
+            "difficulty_counts": [],
+            "topics": [
+                {"_id": "Arrays"},
+                {"_id": "DP"},
+                {"_id": "Graphs"},
+            ],
+            "total": [{"count": 5}],
+        }]
+        with patch("main.questions_col") as mock_col:
+            mock_cursor = MagicMock()
+            mock_cursor.to_list = AsyncMock(return_value=facet_result)
+            mock_col.aggregate = MagicMock(return_value=mock_cursor)
+            response = await client.get("/questions/stats")
+
+        body = response.json()
+        assert body["topics"] == ["Arrays", "DP", "Graphs"]
+
+    @pytest.mark.asyncio
+    async def test_empty_collection(self, client):
+        facet_result = [{
+            "difficulty_counts": [],
+            "topics": [],
+            "total": [],
+        }]
+        with patch("main.questions_col") as mock_col:
+            mock_cursor = MagicMock()
+            mock_cursor.to_list = AsyncMock(return_value=facet_result)
+            mock_col.aggregate = MagicMock(return_value=mock_cursor)
+            response = await client.get("/questions/stats")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 0
+        assert body["difficulty_counts"] == {}
+        assert body["topics"] == []
+
+    @pytest.mark.asyncio
+    async def test_503_on_db_error(self, client):
+        with patch("main.questions_col") as mock_col:
+            mock_col.aggregate = MagicMock(side_effect=PyMongoError("timeout"))
+            response = await client.get("/questions/stats")
         assert response.status_code == 503
 
 

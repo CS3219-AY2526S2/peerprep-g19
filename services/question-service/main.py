@@ -1,4 +1,5 @@
 import os
+import re
 import random
 import logging
 import motor.motor_asyncio
@@ -8,7 +9,7 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, Field, field_validator
-from pymongo import ReturnDocument
+from pymongo import ReturnDocument, ASCENDING
 from pymongo.errors import PyMongoError
 
 app = FastAPI(title="PeerPrep Question Service")
@@ -66,6 +67,9 @@ class QuestionSchema(BaseModel):
             raise ValueError("Invalid language for model answer")
         return v
 
+VALID_DIFFICULTIES = ("Easy", "Medium", "Hard")
+
+
 class DeleteRequest(BaseModel):
     title: str = Field(..., max_length=100)
 
@@ -79,6 +83,13 @@ async def get_current_admin(token: str = Depends(oauth2_scheme)):
     # if "Admin" not in decoded_token['roles']: raise 403
     # return decoded_token['email']
     return "admin@cloud-idp.com"  # Mocked for implementation
+
+
+@app.on_event("startup")
+async def create_indexes():
+    await questions_col.create_index([("title", ASCENDING)])
+    await questions_col.create_index([("difficulty", ASCENDING)])
+    await questions_col.create_index([("topics", ASCENDING)])
 
 
 @app.post("/upsert", status_code=200)
@@ -175,18 +186,83 @@ async def fetch_question(topics: str, difficulty: str):
 
 
 @app.get("/questions")
-async def list_questions():
-    """Returns all questions in the database."""
+async def list_questions(
+    skip: int = 0,
+    limit: int = 20,
+    search: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    topic: Optional[str] = None,
+):
+    """Returns paginated, filterable questions."""
+    if difficulty and difficulty not in VALID_DIFFICULTIES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid difficulty '{difficulty}'. Must be one of: Easy, Medium, Hard",
+        )
+
+    mongo_filter: dict = {}
+    if search:
+        mongo_filter["title"] = {"$regex": re.escape(search), "$options": "i"}
+    if difficulty:
+        mongo_filter["difficulty"] = difficulty
+    if topic:
+        mongo_filter["topics"] = topic
+
     try:
-        cursor = questions_col.find({})
-        results = await cursor.to_list(length=500)
+        total = await questions_col.count_documents(mongo_filter)
+        cursor = questions_col.find(mongo_filter).sort("title", ASCENDING).skip(skip).limit(limit)
+        results = await cursor.to_list(length=limit)
     except PyMongoError as exc:
         logger.error("MongoDB query failed: %s", exc)
         raise HTTPException(status_code=503, detail="Database unavailable, please retry later") from exc
 
     for r in results:
         r["_id"] = str(r["_id"])
-    return results
+
+    return {
+        "data": results,
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+        "hasMore": skip + limit < total,
+    }
+
+
+@app.get("/questions/stats")
+async def question_stats():
+    """Returns aggregate stats: total count, difficulty breakdown, and unique topics."""
+    try:
+        pipeline = [
+            {
+                "$facet": {
+                    "difficulty_counts": [
+                        {"$group": {"_id": "$difficulty", "count": {"$sum": 1}}}
+                    ],
+                    "topics": [
+                        {"$unwind": "$topics"},
+                        {"$group": {"_id": "$topics"}},
+                        {"$sort": {"_id": 1}},
+                    ],
+                    "total": [{"$count": "count"}],
+                }
+            }
+        ]
+        cursor = questions_col.aggregate(pipeline)
+        result = await cursor.to_list(length=1)
+    except PyMongoError as exc:
+        logger.error("MongoDB aggregation failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Database unavailable, please retry later") from exc
+
+    facets = result[0] if result else {"difficulty_counts": [], "topics": [], "total": []}
+    total = facets["total"][0]["count"] if facets["total"] else 0
+    difficulty_counts = {item["_id"]: item["count"] for item in facets["difficulty_counts"]}
+    topics = [item["_id"] for item in facets["topics"]]
+
+    return {
+        "total": total,
+        "difficulty_counts": difficulty_counts,
+        "topics": topics,
+    }
 
 
 @app.get("/questions/{title}")
