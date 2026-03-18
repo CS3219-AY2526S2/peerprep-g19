@@ -48,6 +48,6 @@ const UserModelSchema = new Schema({
   ],
 });
 
-userSchema.index({ "questionHistory.questionId": 1 });
+UserModelSchema.index({ "questionHistory.questionId": 1 });
 
 export default mongoose.model("UserModel", UserModelSchema);

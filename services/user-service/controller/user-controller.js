@@ -140,7 +140,28 @@ export async function deleteUser(req, res) {
   }
 }
 
-export async function getUserHistory(req, res) {}
+export async function getUserQuestionHistory(req, res) {
+  try {
+    const userId = req.params.id;
+    if (!isValidObjectId(userId)) {
+      return res.status(404).json({ message: `User ${userId} not found` });
+    }
+    const user = await _findUserById(userId);
+    if (!user) {
+      return res.status(404).json({ message: `User ${userId} not found` });
+    }
+
+    return res.status(200).json({
+      message: `Found question history for user ${userId}`,
+      data: user.questionHistory || [],
+    });
+  } catch (err) {
+    console.error(err);
+    return res
+      .status(500)
+      .json({ message: "Unknown error when getting user history!" });
+  }
+}
 
 export function formatUserResponse(user) {
   return {

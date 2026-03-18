@@ -4,7 +4,7 @@ import {
   deleteUser,
   getAllUsers,
   getUser,
-  getUserHistory,
+  getUserQuestionHistory,
   updateUser,
   updateUserPrivilege,
 } from "../controller/user-controller.js";
@@ -35,7 +35,7 @@ router.get(
   "/:id/history",
   verifyAccessToken,
   verifyIsOwnerOrAdmin,
-  getUserHistory,
+  getUserQuestionHistory,
 );
 
 export default router;
