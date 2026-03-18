@@ -45,6 +45,17 @@ export async function countUsersByRole(role) {
   return UserModel.countDocuments({ role });
 }
 
+export async function existsUserByRoleExcludingId(role, excludedUserId) {
+  const existingUser = await UserModel.findOne({
+    role,
+    _id: { $ne: excludedUserId },
+  })
+    .select("_id")
+    .lean();
+
+  return Boolean(existingUser);
+}
+
 export async function updateUserById(userId, updates) {
   return UserModel.findByIdAndUpdate(
     userId,

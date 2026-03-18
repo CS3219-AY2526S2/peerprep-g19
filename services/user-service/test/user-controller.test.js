@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockRes } from "./test-utils.js";
 
 const repositoryMocks = {
-  countUsersByRole: vi.fn(),
   deleteUserById: vi.fn(),
+  existsUserByRoleExcludingId: vi.fn(),
   findUserById: vi.fn(),
   findUserByUsername: vi.fn(),
   updateUserById: vi.fn(),
@@ -13,8 +13,8 @@ const repositoryMocks = {
 const setUserRoleClaimMock = vi.fn();
 
 vi.mock("../model/repository.js", () => ({
-  countUsersByRole: repositoryMocks.countUsersByRole,
   deleteUserById: repositoryMocks.deleteUserById,
+  existsUserByRoleExcludingId: repositoryMocks.existsUserByRoleExcludingId,
   findAllUsers: vi.fn(),
   findUserById: repositoryMocks.findUserById,
   findUserByUsername: repositoryMocks.findUserByUsername,
@@ -125,7 +125,7 @@ describe("user-controller", () => {
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({ message: "Admins cannot be demoted" });
-    expect(repositoryMocks.countUsersByRole).not.toHaveBeenCalled();
+    expect(repositoryMocks.existsUserByRoleExcludingId).not.toHaveBeenCalled();
     expect(repositoryMocks.updateUserPrivilegeById).not.toHaveBeenCalled();
     expect(setUserRoleClaimMock).not.toHaveBeenCalled();
   });
@@ -136,7 +136,7 @@ describe("user-controller", () => {
       firebaseuuid: "firebase-uid-1",
       role: "admin",
     });
-    repositoryMocks.countUsersByRole.mockResolvedValueOnce(1);
+    repositoryMocks.existsUserByRoleExcludingId.mockResolvedValueOnce(false);
 
     const req = {
       params: { id: "507f1f77bcf86cd799439011" },
@@ -146,7 +146,10 @@ describe("user-controller", () => {
 
     await deleteUser(req, res);
 
-    expect(repositoryMocks.countUsersByRole).toHaveBeenCalledWith("admin");
+    expect(repositoryMocks.existsUserByRoleExcludingId).toHaveBeenCalledWith(
+      "admin",
+      "507f1f77bcf86cd799439011",
+    );
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({ message: "Cannot delete the last admin" });
     expect(repositoryMocks.deleteUserById).not.toHaveBeenCalled();
@@ -158,7 +161,7 @@ describe("user-controller", () => {
       firebaseuuid: "firebase-uid-2",
       role: "admin",
     });
-    repositoryMocks.countUsersByRole.mockResolvedValueOnce(2);
+    repositoryMocks.existsUserByRoleExcludingId.mockResolvedValueOnce(true);
     repositoryMocks.deleteUserById.mockResolvedValueOnce({
       id: "507f1f77bcf86cd799439011",
     });

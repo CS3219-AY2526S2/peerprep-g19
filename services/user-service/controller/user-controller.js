@@ -1,7 +1,7 @@
 import { isValidObjectId } from "mongoose";
 import {
-  countUsersByRole as _countUsersByRole,
   deleteUserById as _deleteUserById,
+  existsUserByRoleExcludingId as _existsUserByRoleExcludingId,
   findAllUsers as _findAllUsers,
   findUserById as _findUserById,
   findUserByUsername as _findUserByUsername,
@@ -136,8 +136,11 @@ export async function deleteUser(req, res) {
     }
 
     if (user.role === USER_ROLES.ADMIN) {
-      const adminCount = await _countUsersByRole(USER_ROLES.ADMIN);
-      if (adminCount <= 1) {
+      const hasAnotherAdmin = await _existsUserByRoleExcludingId(
+        USER_ROLES.ADMIN,
+        userId,
+      );
+      if (!hasAnotherAdmin) {
         return res
           .status(400)
           .json({ message: "Cannot delete the last admin" });
