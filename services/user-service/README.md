@@ -27,13 +27,31 @@
 
     ![alt text](./GuideAssets/ConnectionString.png)
 
-7. In the `user-service` directory, create a copy of the `.env.sample` file and name it `.env`.
+7. In the `user-service` directory, create a `.env` file.
 
-8. Click on the triple dots on User-Service and then on Connect via
+8. Add the following variables to `.env`:
 
-9. Select via Drivers and then copy the link
+  ```env
+  # Required: selects which DB URI the service uses
+  ENV=development
 
-10. Update the `DB_CLOUD_URI` of the `.env` file, and paste the string we copied earlier in **step 6**. Also remember to replace the `<db_username> ` and `<db_password>` placeholder with the **actual username** **actual password**.
+  # Required when ENV=development
+  DB_LOCAL_URI=mongodb://127.0.0.1:27017/peerprepUserServiceDB
+
+  # Required when ENV=PROD
+  DB_CLOUD_URI=mongodb+srv://<db_username>:<db_password>@<cluster-host>/<db-name>?retryWrites=true&w=majority
+
+  # Optional (defaults to 3001 in docker-compose)
+  PORT=3001
+
+  # Optional when config/service_key.json exists in the project.
+  # If you prefer env-based credentials, set this to a compact single-line JSON string.
+  FIREBASE_SERVICE_KEY=
+  ```
+
+9. If you are using `DB_CLOUD_URI`, replace `<db_username>` and `<db_password>` with your actual credentials.
+
+10. If your MongoDB password contains special characters, URL-encode them (for example `@` becomes `%40`).
 
 ## Running User Service
 
@@ -66,6 +84,58 @@
     ```
 
 4. Using applications like Postman, you can interact with the User Service on port `3001`. If you wish to change this, please update `PORT` in the `.env` file.
+
+## Running With Docker Compose
+
+1. Open Terminal and go to the `user-service` folder.
+
+  ```sh
+  cd services/user-service
+  ```
+
+2. Ensure your `.env` file exists and includes the fields listed in the setup section.
+
+3. Build and start the container:
+
+  ```sh
+  docker compose up --build
+  ```
+
+4. Stop and remove the container when done:
+
+  ```sh
+  docker compose down
+  ```
+
+5. Service endpoint after startup:
+   - `http://localhost:3001`
+
+### Required `.env` Fields (Compose)
+
+Use this quick checklist before running `docker compose up --build`:
+
+- Required: `ENV`
+- Required when `ENV=development`: `DB_LOCAL_URI`
+- Required when `ENV=PROD`: `DB_CLOUD_URI`
+- Optional: `PORT` (defaults to `3001`)
+- Optional: `FIREBASE_SERVICE_KEY` (not required if `config/service_key.json` is present in the container)
+
+Example:
+
+```env
+ENV=development
+DB_LOCAL_URI=mongodb://127.0.0.1:27017/peerprepUserServiceDB
+DB_CLOUD_URI=
+PORT=3001
+FIREBASE_SERVICE_KEY=
+```
+
+### Docker Compose Environment Rules
+
+- `ENV=development` uses `DB_LOCAL_URI`.
+- `ENV=PROD` uses `DB_CLOUD_URI`.
+- If the selected URI is missing, the service will fail at MongoDB connection startup.
+- The service currently uses `ENV` for DB selection logic (not `NODE_ENV`).
 
 ## User Service API Guide
 
