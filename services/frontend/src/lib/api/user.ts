@@ -1,22 +1,11 @@
 import { apiFetch } from "./client";
-import type { LoginResponse, UserResponse, UsersResponse } from "@/types/user";
+import type { UserResponse, UsersResponse } from "@/types/user";
 
-export async function login(email: string, password: string): Promise<LoginResponse> {
-  return apiFetch<LoginResponse>("/api/auth/login", {
+export async function registerUser(username: string): Promise<UserResponse> {
+  return apiFetch<UserResponse>("/api/auth/register", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ username }),
   });
-}
-
-export async function register(username: string, email: string, password: string): Promise<UserResponse> {
-  return apiFetch<UserResponse>("/api/users", {
-    method: "POST",
-    body: JSON.stringify({ username, email, password }),
-  });
-}
-
-export async function verifyToken(): Promise<UserResponse> {
-  return apiFetch<UserResponse>("/api/auth/verify-token");
 }
 
 export async function getUser(id: string): Promise<UserResponse> {

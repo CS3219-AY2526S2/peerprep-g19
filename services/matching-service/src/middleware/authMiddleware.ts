@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from "express";
-import axios from "axios";
+import admin from "../config/firebase";
 
-const USER_SERVICE_URL = process.env.USER_SERVICE_URL || "http://localhost:3001";
 const WITH_AUTH = process.env.WITH_AUTH !== "false";
 
 export async function authenticate(
@@ -9,11 +8,12 @@ export async function authenticate(
  res: Response,
  next: NextFunction
 ) {
- // If authentication is disabled, use default test user
  if (!WITH_AUTH) {
-  (req as any).user = { 
-   email: "test@gmail.com", 
-   username: "test" 
+  // In dev mode, use X-Dev-Email header to distinguish users; fall back to a default
+  const devEmail = (req.headers["x-dev-email"] as string) || "test@gmail.com";
+  (req as any).user = {
+   email: devEmail,
+   username: devEmail.split("@")[0],
   };
   return next();
  }
@@ -26,33 +26,15 @@ export async function authenticate(
   }
 
   const token = authHeader.split(" ")[1];
+  const decoded = await admin.auth().verifyIdToken(token);
 
-  const response = await axios.get(
-   `${USER_SERVICE_URL}/auth/verify-token`,
-   {
-    headers: {
-     Authorization: `Bearer ${token}`
-    }
-   }
-  );
-
-  const responseBody = response.data;
-  const user = responseBody.data;
-
-  // Guard clause to ensure the user object and email exist in the response
-  if (!user || !user.email) {
-    console.error("Verification successful, but the response payload is not in the expected format. User object or email is missing.", responseBody);
-    return res.status(401).json({ error: "Invalid token payload: email missing." });
-  }
-
-  (req as any).user = { email: user.email, username: user.username }; // Attach user info to the request
+  (req as any).user = {
+   email: decoded.email,
+   username: decoded.name || decoded.email?.split("@")[0],
+  };
 
   next();
-
  } catch (error) {
-  if (axios.isAxiosError(error)) {
-    console.error("Axios error during token verification:", error.response?.data || error.message);
-  }
   return res.status(401).json({ error: "Invalid or expired token" });
  }
 }

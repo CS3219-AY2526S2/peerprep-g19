@@ -5,6 +5,9 @@ import { redisClient } from "../redis/redisClient";
  */
 export async function addUserToQueue(email: string, queueKey: string) {
 
+  // Remove any stale entry first to prevent duplicates (e.g. rapid double-join)
+  await redisClient.lRem(queueKey, 0, email);
+
   await redisClient.lPush(queueKey, email);
   await redisClient.set(`user:queue:${email}`, queueKey);
 
@@ -45,4 +48,25 @@ export async function getUserQueue(email: string) {
  */
 export async function getQueue(queueKey: string) {
   return redisClient.lRange(queueKey, 0, -1);
+}
+
+/**
+ * Atomically pop two users from a queue using a Lua script.
+ * Guarantees that either both users are popped or neither is,
+ * preventing races between the match worker and leave/timeout operations.
+ */
+const ATOMIC_POP_PAIR_SCRIPT = `
+if redis.call('LLEN', KEYS[1]) < 2 then
+  return nil
+end
+return {redis.call('RPOP', KEYS[1]), redis.call('RPOP', KEYS[1])}
+`;
+
+export async function atomicPopPair(queueKey: string): Promise<[string, string] | null> {
+  const result = await redisClient.eval(ATOMIC_POP_PAIR_SCRIPT, {
+    keys: [queueKey],
+  });
+
+  if (!result || !Array.isArray(result) || result.length < 2) return null;
+  return [result[0] as string, result[1] as string];
 }

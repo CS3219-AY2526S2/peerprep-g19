@@ -1,49 +1,69 @@
 import { redisClient } from "../redis/redisClient";
 import { sendEvent, closeConnection } from "../sse/connectionManager";
-import { removeQueueMapping } from "../services/queueService";
+import { removeQueueMapping, atomicPopPair } from "../services/queueService";
 
 /**
  * Background worker responsible for matching users in queues.
+ *
+ * Uses setTimeout recursion (not setInterval) to guarantee the previous
+ * tick finishes before the next one starts, preventing overlapping iterations
+ * that could double-pop and silently lose users.
  */
 export function startMatchWorker() {
 
-  setInterval(async () => {
+  async function tick() {
+    try {
 
-    const keys = await redisClient.keys("queue:*");
+      // SCAN is non-blocking, unlike KEYS which blocks the Redis event loop
+      const keys: string[] = [];
+      for await (const batch of redisClient.scanIterator({ MATCH: "queue:*", COUNT: 100 })) {
+        if (Array.isArray(batch)) {
+          keys.push(...batch);
+        } else {
+          keys.push(batch);
+        }
+      }
 
-    for (const queueKey of keys) {
+      for (const queueKey of keys) {
 
-      const length = await redisClient.lLen(queueKey);
+        // Atomically check length and pop two users in a single Lua script.
+        // This prevents races where a user leaves between lLen and rPop,
+        // or overlapping ticks double-pop from the same queue.
+        const pair = await atomicPopPair(queueKey);
+        if (!pair) continue;
 
-      if (length < 2) continue;
+        const [user1, user2] = pair;
 
-      const user1 = await redisClient.rPop(queueKey);
-      const user2 = await redisClient.rPop(queueKey);
+        await removeQueueMapping(user1);
+        await removeQueueMapping(user2);
 
-      if (!user1 || !user2) continue;
+        console.log("MATCH FOUND");
+        console.log(user1, "<->", user2);
 
-      await removeQueueMapping(user1);
-      await removeQueueMapping(user2);
+        sendEvent(user1, {
+          type: "MATCH_FOUND",
+          peer: user2
+        });
 
-      console.log("MATCH FOUND");
-      console.log(user1, "<->", user2);
+        sendEvent(user2, {
+          type: "MATCH_FOUND",
+          peer: user1
+        });
 
-      sendEvent(user1, {
-        type: "MATCH_FOUND",
-        peer: user2
-      });
+        // closeConnection triggers the per-connection cleanup callback,
+        // which clears the QUEUE_UPDATE and timeout intervals
+        closeConnection(user1);
+        closeConnection(user2);
 
-      sendEvent(user2, {
-        type: "MATCH_FOUND",
-        peer: user1
-      });
+      }
 
-      // close SSE connections after match
-      closeConnection(user1);
-      closeConnection(user2);
-
+    } catch (err) {
+      console.error("Match worker error:", err);
     }
 
-  }, 1000);
+    setTimeout(tick, 1000);
+  }
+
+  setTimeout(tick, 1000);
 
 }
