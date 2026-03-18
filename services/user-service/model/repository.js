@@ -41,6 +41,10 @@ export async function findAllUsers() {
   return UserModel.find();
 }
 
+export async function countUsersByRole(role) {
+  return UserModel.countDocuments({ role });
+}
+
 export async function updateUserById(userId, updates) {
   return UserModel.findByIdAndUpdate(
     userId,

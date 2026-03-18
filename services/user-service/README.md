@@ -180,6 +180,7 @@ For protected routes, include:
 You need an admin token to use this endpoint.
 
 - Purpose: Update role in MongoDB and sync Firebase custom claim.
+- Safety rule: Admin users cannot be demoted to `user`.
 - HTTP Method: `PATCH`
 - Endpoint: <http://localhost:3001/users/{userId}/privilege>
 - Parameters
@@ -190,6 +191,8 @@ You need an admin token to use this endpoint.
 - Body
   - Required: `role` (string)
   - Allowed values: `"admin"`, `"user"`
+
+  > Note: Setting role to `"user"` for a target that is currently an admin will be rejected.
 
     ```json
     {
@@ -202,7 +205,7 @@ You need an admin token to use this endpoint.
     | Response Code               | Explanation                                  |
     |-----------------------------|----------------------------------------------|
     | 200 (OK)                    | Role updated in MongoDB and Firebase claim   |
-    | 400 (Bad Request)           | Missing/invalid role                         |
+    | 400 (Bad Request)           | Missing/invalid role or attempted admin demotion |
     | 401 (Unauthorized)          | Missing/invalid Firebase ID token            |
     | 403 (Forbidden)             | Caller is not admin                          |
     | 404 (Not Found)             | User not found                               |
@@ -308,6 +311,7 @@ You need an admin token to use this endpoint.
 ### Delete User
 
 - This endpoint allows deletion of a user and their related data from the database using the user's ID.
+- Safety rule: The final remaining admin account cannot be deleted.
 - HTTP Method: `DELETE`
 - Endpoint: <http://localhost:3001/users/{userId}>
 - Parameters
@@ -327,6 +331,7 @@ You need an admin token to use this endpoint.
     | Response Code               | Explanation                                             |
     |-----------------------------|---------------------------------------------------------|
     | 200 (OK)                    | User deleted successfully                               |
+    | 400 (Bad Request)           | Cannot delete the last admin                            |
     | 401 (Unauthorized)          | Access denied due to missing/invalid/expired token      |
     | 403 (Forbidden)             | Access denied for non-admin users deleting others' data |
     | 404 (Not Found)             | User with the specified ID not found                    |

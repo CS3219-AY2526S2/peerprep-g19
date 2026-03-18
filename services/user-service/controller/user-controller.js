@@ -1,5 +1,6 @@
 import { isValidObjectId } from "mongoose";
 import {
+  countUsersByRole as _countUsersByRole,
   deleteUserById as _deleteUserById,
   findAllUsers as _findAllUsers,
   findUserById as _findUserById,
@@ -100,6 +101,12 @@ export async function updateUserPrivilege(req, res) {
         return res.status(404).json({ message: `User ${userId} not found` });
       }
 
+      const isDemotingAdmin =
+        user.role === USER_ROLES.ADMIN && role !== USER_ROLES.ADMIN;
+      if (isDemotingAdmin) {
+        return res.status(400).json({ message: "Admins cannot be demoted" });
+      }
+
       const updatedUser = await _updateUserPrivilegeById(userId, role);
       await setUserRoleClaim(user.firebaseuuid, role);
       return res.status(200).json({
@@ -126,6 +133,15 @@ export async function deleteUser(req, res) {
     const user = await _findUserById(userId);
     if (!user) {
       return res.status(404).json({ message: `User ${userId} not found` });
+    }
+
+    if (user.role === USER_ROLES.ADMIN) {
+      const adminCount = await _countUsersByRole(USER_ROLES.ADMIN);
+      if (adminCount <= 1) {
+        return res
+          .status(400)
+          .json({ message: "Cannot delete the last admin" });
+      }
     }
 
     await _deleteUserById(userId);

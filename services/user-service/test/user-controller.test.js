@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockRes } from "./test-utils.js";
 
 const repositoryMocks = {
+  countUsersByRole: vi.fn(),
+  deleteUserById: vi.fn(),
   findUserById: vi.fn(),
   findUserByUsername: vi.fn(),
   updateUserById: vi.fn(),
@@ -11,7 +13,8 @@ const repositoryMocks = {
 const setUserRoleClaimMock = vi.fn();
 
 vi.mock("../model/repository.js", () => ({
-  deleteUserById: vi.fn(),
+  countUsersByRole: repositoryMocks.countUsersByRole,
+  deleteUserById: repositoryMocks.deleteUserById,
   findAllUsers: vi.fn(),
   findUserById: repositoryMocks.findUserById,
   findUserByUsername: repositoryMocks.findUserByUsername,
@@ -23,9 +26,8 @@ vi.mock("../helper/firebase-auth-helper.js", () => ({
   setUserRoleClaim: setUserRoleClaimMock,
 }));
 
-const { updateUser, updateUserPrivilege } = await import(
-  "../controller/user-controller.js"
-);
+const { deleteUser, updateUser, updateUserPrivilege } =
+  await import("../controller/user-controller.js");
 
 describe("user-controller", () => {
   beforeEach(() => {
@@ -101,6 +103,76 @@ describe("user-controller", () => {
     expect(setUserRoleClaimMock).toHaveBeenCalledWith(
       "firebase-uid-1",
       "admin",
+    );
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("updateUserPrivilege blocks demoting an admin", async () => {
+    repositoryMocks.findUserById.mockResolvedValueOnce({
+      id: "507f1f77bcf86cd799439011",
+      firebaseuuid: "firebase-uid-1",
+      role: "admin",
+    });
+
+    const req = {
+      body: { role: "user" },
+      params: { id: "507f1f77bcf86cd799439011" },
+      user: { uid: "firebase-uid-1", role: "admin" },
+    };
+    const res = createMockRes();
+
+    await updateUserPrivilege(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ message: "Admins cannot be demoted" });
+    expect(repositoryMocks.countUsersByRole).not.toHaveBeenCalled();
+    expect(repositoryMocks.updateUserPrivilegeById).not.toHaveBeenCalled();
+    expect(setUserRoleClaimMock).not.toHaveBeenCalled();
+  });
+
+  it("deleteUser blocks deleting the last admin", async () => {
+    repositoryMocks.findUserById.mockResolvedValueOnce({
+      id: "507f1f77bcf86cd799439011",
+      firebaseuuid: "firebase-uid-1",
+      role: "admin",
+    });
+    repositoryMocks.countUsersByRole.mockResolvedValueOnce(1);
+
+    const req = {
+      params: { id: "507f1f77bcf86cd799439011" },
+      user: { uid: "firebase-uid-1", role: "admin" },
+    };
+    const res = createMockRes();
+
+    await deleteUser(req, res);
+
+    expect(repositoryMocks.countUsersByRole).toHaveBeenCalledWith("admin");
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ message: "Cannot delete the last admin" });
+    expect(repositoryMocks.deleteUserById).not.toHaveBeenCalled();
+  });
+
+  it("deleteUser allows deleting an admin when other admins still exist", async () => {
+    repositoryMocks.findUserById.mockResolvedValueOnce({
+      id: "507f1f77bcf86cd799439011",
+      firebaseuuid: "firebase-uid-2",
+      role: "admin",
+    });
+    repositoryMocks.countUsersByRole.mockResolvedValueOnce(2);
+    repositoryMocks.deleteUserById.mockResolvedValueOnce({
+      id: "507f1f77bcf86cd799439011",
+    });
+
+    const req = {
+      params: { id: "507f1f77bcf86cd799439011" },
+      user: { uid: "firebase-uid-1", role: "admin" },
+    };
+    const res = createMockRes();
+
+    await deleteUser(req, res);
+
+    expect(repositoryMocks.deleteUserById).toHaveBeenCalledWith(
+      "507f1f77bcf86cd799439011",
     );
     expect(res.statusCode).toBe(200);
   });
