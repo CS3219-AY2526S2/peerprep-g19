@@ -66,3 +66,15 @@ export async function updateUserPrivilegeById(userId, role) {
 export async function deleteUserById(userId) {
   return UserModel.findByIdAndDelete(userId);
 }
+
+async function addToQuestionHistory(userId, questionId, questionTitle) {
+  await User.findByIdAndUpdate(userId, {
+    $addToSet: {
+      // Prevents duplicates
+      questionHistory: {
+        questionId: questionId,
+        questionTitle: questionTitle,
+      },
+    },
+  });
+}

@@ -34,6 +34,20 @@ const UserModelSchema = new Schema({
     default: USER_ROLES.USER,
     index: true,
   },
+  questionHistory: [
+    {
+      questionId: {
+        type: String,
+        required: true,
+      },
+      questionTitle: {
+        type: String,
+        required: true,
+      },
+    },
+  ],
 });
+
+userSchema.index({ "questionHistory.questionId": 1 });
 
 export default mongoose.model("UserModel", UserModelSchema);

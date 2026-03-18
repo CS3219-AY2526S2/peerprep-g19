@@ -140,6 +140,8 @@ export async function deleteUser(req, res) {
   }
 }
 
+export async function getUserHistory(req, res) {}
+
 export function formatUserResponse(user) {
   return {
     id: user.id,

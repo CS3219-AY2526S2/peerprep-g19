@@ -4,6 +4,7 @@ import {
   deleteUser,
   getAllUsers,
   getUser,
+  getUserHistory,
   updateUser,
   updateUserPrivilege,
 } from "../controller/user-controller.js";
@@ -29,5 +30,12 @@ router.get("/:id", verifyAccessToken, verifyIsOwnerOrAdmin, getUser);
 router.patch("/:id", verifyAccessToken, verifyIsOwnerOrAdmin, updateUser);
 
 router.delete("/:id", verifyAccessToken, verifyIsOwnerOrAdmin, deleteUser);
+
+router.get(
+  "/:id/history",
+  verifyAccessToken,
+  verifyIsOwnerOrAdmin,
+  getUserHistory,
+);
 
 export default router;
