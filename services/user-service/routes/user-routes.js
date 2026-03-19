@@ -15,19 +15,17 @@ import {
 
 const router = express.Router();
 
-router.get("/", verifyAccessToken, verifyIsAdmin, getAllUsers);
+// Authenticate all /users routes once, then apply per-route authorization.
+router.use(verifyAccessToken);
 
-router.patch(
-  "/:id/privilege",
-  verifyAccessToken,
-  verifyIsAdmin,
-  updateUserPrivilege,
-);
+router.get("/", verifyIsAdmin, getAllUsers);
 
-router.get("/:id", verifyAccessToken, verifyIsOwnerOrAdmin, getUser);
+router.patch("/:id/privilege", verifyIsAdmin, updateUserPrivilege);
 
-router.patch("/:id", verifyAccessToken, verifyIsOwnerOrAdmin, updateUser);
+router.get("/:id", verifyIsOwnerOrAdmin, getUser);
 
-router.delete("/:id", verifyAccessToken, verifyIsOwnerOrAdmin, deleteUser);
+router.patch("/:id", verifyIsOwnerOrAdmin, updateUser);
+
+router.delete("/:id", verifyIsOwnerOrAdmin, deleteUser);
 
 export default router;
