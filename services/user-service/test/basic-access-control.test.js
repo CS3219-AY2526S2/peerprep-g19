@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
 const verifyIdTokenMock = vi.fn();
-const findUserByIdMock = vi.fn();
 
 vi.mock("../config/firebase.js", () => ({
   default: {
@@ -11,13 +10,8 @@ vi.mock("../config/firebase.js", () => ({
   },
 }));
 
-vi.mock("../model/repository.js", () => ({
-  findUserById: findUserByIdMock,
-}));
-
-const { verifyAccessToken, verifyIsAdmin, verifyIsOwnerOrAdmin } = await import(
-  "../middleware/basic-access-control.js"
-);
+const { verifyAccessToken, verifyIsAdmin, verifyIsOwnerOrAdmin } =
+  await import("../middleware/basic-access-control.js");
 
 const FORBIDDEN_MESSAGE = "Not authorized to access this resource";
 
@@ -117,26 +111,25 @@ describe("basic-access-control middleware", () => {
     expect(next).toHaveBeenCalledOnce();
   });
 
-  it("verifyIsOwnerOrAdmin calls next when mongo user id maps to token uid", async () => {
-    findUserByIdMock.mockResolvedValueOnce({ firebaseuuid: "owner-uid" });
+  it("verifyIsOwnerOrAdmin returns 403 when uid in params does not match token uid", async () => {
     const req = {
       user: { uid: "owner-uid", role: "user" },
-      params: { id: "507f1f77bcf86cd799439011" },
+      params: { id: "different-uid" },
     };
     const res = createMockRes();
     const next = vi.fn();
 
     await verifyIsOwnerOrAdmin(req, res, next);
 
-    expect(findUserByIdMock).toHaveBeenCalledWith("507f1f77bcf86cd799439011");
-    expect(next).toHaveBeenCalledOnce();
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toEqual({ message: FORBIDDEN_MESSAGE });
   });
 
   it("verifyIsOwnerOrAdmin returns 403 when user is neither owner nor admin", async () => {
-    findUserByIdMock.mockResolvedValueOnce({ firebaseuuid: "someone-else" });
     const req = {
       user: { uid: "user-uid", role: "user" },
-      params: { id: "507f1f77bcf86cd799439011" },
+      params: { id: "another-user-uid" },
     };
     const res = createMockRes();
     const next = vi.fn();

@@ -1,6 +1,4 @@
 import admin from "../config/firebase.js";
-import { isValidObjectId } from "mongoose";
-import { findUserById as _findUserById } from "../model/repository.js";
 
 export const verifyAccessToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -53,13 +51,6 @@ export const verifyIsOwnerOrAdmin = async (req, res, next) => {
 
   if (ownerIdFromParams === userIdFromToken) {
     return next();
-  }
-
-  if (isValidObjectId(ownerIdFromParams)) {
-    const ownerUser = await _findUserById(ownerIdFromParams);
-    if (ownerUser?.firebaseuuid === userIdFromToken) {
-      return next();
-    }
   }
 
   return res
