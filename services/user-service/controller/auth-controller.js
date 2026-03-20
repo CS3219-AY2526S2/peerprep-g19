@@ -1,5 +1,5 @@
 import admin from "../config/firebase.js";
-import { createUser, findUserByFirebaseUuid } from "../model/repository.js";
+import { createUser, findUserByFirebaseUuid } from "../model/firebase-repository.js";
 import { formatUserResponse } from "./user-controller.js";
 
 // export async function handleLogin(req, res) {
