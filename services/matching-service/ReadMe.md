@@ -129,6 +129,29 @@ The service will:
 * Listen for incoming HTTP requests (join/leave queue)
 * Serve SSE connections to update clients in real-time
 
+## Testing
+
+Run the test suite:
+
+```bash
+npm test
+```
+
+Run tests with coverage:
+
+```bash
+npm run test:coverage
+```
+
+The test suite includes:
+- Queue service operations (Redis)
+- Authentication middleware
+- HTTP controllers
+- Connection management (SSE)
+- Background worker logic
+
+Coverage report is available in the `coverage/` directory.
+
 ---
 
 ## API Endpoints
