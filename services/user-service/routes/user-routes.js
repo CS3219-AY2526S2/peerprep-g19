@@ -8,6 +8,11 @@ import {
   updateUserPrivilege,
 } from "../controller/user-controller.js";
 import {
+  createAttempt,
+  getAttemptHistory,
+  getAttemptSummary,
+} from "../controller/attempt-controller.js";
+import {
   verifyAccessToken,
   verifyIsAdmin,
   verifyIsOwnerOrAdmin,
@@ -22,6 +27,17 @@ router.patch(
   verifyAccessToken,
   verifyIsAdmin,
   updateUserPrivilege,
+);
+
+router.post("/:id/attempts", verifyAccessToken, verifyIsOwnerOrAdmin, createAttempt);
+
+router.get("/:id/attempts", verifyAccessToken, verifyIsOwnerOrAdmin, getAttemptHistory);
+
+router.get(
+  "/:id/attempts/summary",
+  verifyAccessToken,
+  verifyIsOwnerOrAdmin,
+  getAttemptSummary,
 );
 
 router.get("/:id", verifyAccessToken, verifyIsOwnerOrAdmin, getUser);
