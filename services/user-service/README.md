@@ -132,10 +132,31 @@ Fields:
     }
     ```
 
-- Behavior:
-  - If user does not exist in MongoDB: creates user with role `user`, returns `201`.
-  - If user already exists: returns existing user, `200`.
-  - On first registration, Firebase custom claim `role: "user"` is set.
+Behavior:
+
+- If user does not exist in Firestore: creates user with role `user`, returns `201`.
+- If user already exists: returns existing user, `200`.
+- On first registration, Firebase custom claim `role: "user"` is set.
+
+---
+
+### Forgot Password
+
+- Method: `POST`
+- Endpoint: `/auth/forgot-password`
+- Body:
+
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+Behavior:
+
+- If email is valid and exists in Firebase Auth: returns `200` with a reset link.
+- If email does not exist: returns `200` with a generic message.
+- If email is missing: returns `400`.
 
 - Responses:
 
