@@ -139,6 +139,26 @@ Behavior:
 
 ---
 
+### Forgot Password
+
+- Method: `POST`
+- Endpoint: `/auth/forgot-password`
+- Body:
+
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+Behavior:
+
+- If email is valid and exists in Firebase Auth: returns `200` with a reset link.
+- If email does not exist: returns `200` with a generic message.
+- If email is missing: returns `400`.
+
+---
+
 ### Get All Users (Admin only)
 
 - Method: `GET`
