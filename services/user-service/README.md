@@ -64,6 +64,25 @@ Default base URL:
 http://localhost:3001
 ```
 
+### Run with Docker
+
+From `services/user-service`:
+
+```sh
+docker compose -f compose.yaml up --build
+```
+
+Important:
+
+- Ensure `config/service_key.json` exists on your machine.
+- The compose file mounts this key into the container at runtime.
+
+To stop:
+
+```sh
+docker compose -f compose.yaml down
+```
+
 ---
 
 ## Authentication Model
