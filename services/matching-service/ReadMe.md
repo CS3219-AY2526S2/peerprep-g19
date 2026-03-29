@@ -40,6 +40,12 @@ Alternatively, start in the foreground (for testing):
 redis-server
 ```
 
+To stop Redis:
+```bash
+brew services stop redis
+# or if running in foreground, press Ctrl+C
+```
+
 **Linux (Ubuntu):**
 
 ```bash
@@ -49,6 +55,11 @@ sudo systemctl enable redis-server
 sudo systemctl start redis-server
 ```
 
+To stop Redis:
+```bash
+sudo systemctl stop redis-server
+```
+
 **Windows:**
 Use [Redis for Windows](https://github.com/tporadowski/redis/releases) or a Docker container:
 
@@ -56,7 +67,28 @@ Use [Redis for Windows](https://github.com/tporadowski/redis/releases) or a Dock
 docker run -d --name redis -p 6379:6379 redis
 ```
 
+To stop Redis:
+```bash
+docker stop redis
+docker rm redis
+```
+
 Redis runs by default on `localhost:6379`.
+
+### Testing Redis Connection
+
+Before starting the service, you can test if Redis is running and accessible:
+
+**Using redis-cli:**
+
+```bash
+# Test connection
+redis-cli ping
+# Expected response: PONG
+
+# Test with custom host/port if needed
+redis-cli -h localhost -p 6379 ping
+```
 
 ---
 
@@ -128,6 +160,29 @@ The service will:
 * Start the matchmaking worker
 * Listen for incoming HTTP requests (join/leave queue)
 * Serve SSE connections to update clients in real-time
+
+## Testing
+
+Run the test suite:
+
+```bash
+npm test
+```
+
+Run tests with coverage:
+
+```bash
+npm run test:coverage
+```
+
+The test suite includes:
+- Queue service operations (Redis)
+- Authentication middleware
+- HTTP controllers
+- Connection management (SSE)
+- Background worker logic
+
+Coverage report is available in the `coverage/` directory.
 
 ---
 
@@ -249,4 +304,8 @@ PORT=3002
 REDIS_URL=redis://localhost:6379
 USER_SERVICE_URL=http://localhost:3001
 MATCHING_TIMEOUT_MS=60000
+WITH_AUTH=true
+FIREBASE_PROJECT_ID=your-firebase-project-id
+FIREBASE_CLIENT_EMAIL=your-firebase-client-email
+FIREBASE_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----\n"
 ```
