@@ -1,23 +1,20 @@
 import "dotenv/config";
 import admin from "../config/firebase.js";
 import {
-  connectToDB,
   findUserByFirebaseUuid,
   updateUserPrivilegeById,
-} from "../model/repository.js";
+} from "../model/firebase-repository.js";
 
 const setRole = async (uid, role = "admin") => {
-  await connectToDB();
-
-  const mongoUser = await findUserByFirebaseUuid(uid);
-  if (!mongoUser) {
-    throw new Error(`No MongoDB user found for firebaseuuid=${uid}`);
+  const user = await findUserByFirebaseUuid(uid);
+  if (!user) {
+    throw new Error(`No Firestore user found for firebaseuuid=${uid}`);
   }
 
-  await updateUserPrivilegeById(mongoUser.id, role);
+  await updateUserPrivilegeById(uid, role);
   await admin.auth().setCustomUserClaims(uid, { role });
 
-  console.log(`Updated MongoDB role to '${role}' for user ${mongoUser.id}`);
+  console.log(`Updated Firestore role to '${role}' for user ${uid}`);
   console.log(`Updated Firebase custom claim role='${role}' for uid ${uid}`);
 };
 
