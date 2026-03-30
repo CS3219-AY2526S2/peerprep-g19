@@ -15,7 +15,7 @@ vi.mock("../config/firebase.js", () => ({
   },
 }));
 
-vi.mock("../model/repository.js", () => ({
+vi.mock("../model/firebase-repository.js", () => ({
   createUser: createUserMock,
   findUserByFirebaseUuid: findUserByFirebaseUuidMock,
 }));
