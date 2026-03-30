@@ -95,7 +95,7 @@ export default function EditQuestionPage() {
         setHints(q.hints.length > 0 ? q.hints : [""]);
         setModelAnswerCode(q.model_answer_code || "");
         setModelAnswerLang(q.model_answer_lang || "");
-        setImages(q.images ?? []);
+        setImages(q.images || []);
         setVersion(q.version);
       })
       .catch(() => toast("Failed to load question", "error"))
@@ -115,21 +115,25 @@ export default function EditQuestionPage() {
     try {
       const topics = topicsStr.split(",").map((t) => t.trim()).filter(Boolean);
       const filteredHints = hints.filter((h) => h.trim());
-      await upsertQuestion({
+      
+      const payload = {
         ...(id && { _id: id }),
         title,
         description,
         topics,
         difficulty,
         hints: filteredHints,
-        images: images.length > 0 ? images : undefined,
+        images: images,
         model_answer_code: modelAnswerCode || undefined,
         model_answer_lang: modelAnswerLang || undefined,
         version,
-      });
+      };
+      
+      await upsertQuestion(payload);
       toast(isNew ? "Question created!" : "Question updated!", "success");
       router.push("/admin/questions");
     } catch (err) {
+      console.error(" Save failed:", err);
       setError(err instanceof ApiError ? err.message : "Failed to save question");
     } finally {
       setSaving(false);
@@ -153,7 +157,6 @@ export default function EditQuestionPage() {
             placeholder="e.g. Two Sum"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            disabled={!isNew}
           />
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-gray-700">Difficulty *</label>
