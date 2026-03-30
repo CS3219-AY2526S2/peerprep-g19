@@ -57,21 +57,64 @@
     npm start
     ```
 
-    Alternatively, you can start it up in development mode (which includes features like automatic server restart when you make code changes) by running:
+Default base URL:
 
-    ```sh
-    npm run dev
-    ```
+```text
+http://localhost:3001
+```
 
-4. Using applications like Postman, you can interact with the User Service on port `3001`. If you wish to change this, please update `PORT` in the `.env` file.
+### Run with Docker
 
-## User Service API Guide
+From `services/user-service`:
 
-This service currently uses Firebase ID tokens for authentication. It does not issue local JWTs.
+```sh
+docker compose -f compose.yaml up --build
+```
 
-For protected routes, include:
+Important:
 
-`Authorization: Bearer <FIREBASE_ID_TOKEN>`
+- Ensure `config/service_key.json` exists on your machine.
+- The compose file mounts this key into the container at runtime.
+
+To stop:
+
+```sh
+docker compose -f compose.yaml down
+```
+
+---
+
+## Authentication Model
+
+- Protected routes require Firebase ID token:
+
+```text
+Authorization: Bearer <FIREBASE_ID_TOKEN>
+```
+
+- Service verifies token with Firebase Admin SDK.
+- Authorization uses role custom claim (`admin` or `user`).
+
+---
+
+## User Data Model (Firestore)
+
+Collection: `users`
+
+Document ID: Firebase UID (`firebaseuuid`)
+
+Fields:
+
+- `firebaseuuid` (string)
+- `email` (string)
+- `username` (string)
+- `role` (`admin` | `user`)
+- `createdAt` (timestamp)
+- `updatedAt` (timestamp)
+
+---
+
+## API Guide
 
 ### Register User Profile
 
@@ -89,10 +132,31 @@ For protected routes, include:
     }
     ```
 
-- Behavior:
-  - If user does not exist in MongoDB: creates user with role `user`, returns `201`.
-  - If user already exists: returns existing user, `200`.
-  - On first registration, Firebase custom claim `role: "user"` is set.
+Behavior:
+
+- If user does not exist in Firestore: creates user with role `user`, returns `201`.
+- If user already exists: returns existing user, `200`.
+- On first registration, Firebase custom claim `role: "user"` is set.
+
+---
+
+### Forgot Password
+
+- Method: `POST`
+- Endpoint: `/auth/forgot-password`
+- Body:
+
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+Behavior:
+
+- If email is valid and exists in Firebase Auth: returns `200` with a reset link.
+- If email does not exist: returns `200` with a generic message.
+- If email is missing: returns `400`.
 
 - Responses:
 
