@@ -358,7 +358,7 @@ export default function AdminQuestionsPage() {
                 </td>
                 <td className="px-4 py-3 space-x-3">
                   <Link
-                    href={`/admin/questions/${encodeURIComponent(q.title)}/edit`}
+                    href={`/admin/questions/${q._id}/edit`}
                     className="text-[#5568EE] hover:underline"
                   >
                     Edit
@@ -394,13 +394,13 @@ export default function AdminQuestionsPage() {
               : `Showing ${(page - 1) * ITEMS_PER_PAGE + 1}–${Math.min(page * ITEMS_PER_PAGE, total)} of ${total} questions`}
           </p>
           <div className="flex gap-2">
-            <Button variant="secondary" disabled={page === 1} onClick={() => { if (isFiltering) setPage(p => p - 1); else fetchQuestions(page - 1); }}>
+            <Button variant="primary" disabled={page === 1} onClick={() => { if (isFiltering) setPage(p => p - 1); else fetchQuestions(page - 1); }}>
               Previous
             </Button>
             <span className="flex items-center px-3 text-sm text-gray-600">
               Page {page} of {filteredTotalPages}
             </span>
-            <Button variant="secondary" disabled={page >= filteredTotalPages} onClick={() => { if (isFiltering) setPage(p => p + 1); else fetchQuestions(page + 1); }}>
+            <Button variant="primary" disabled={page >= filteredTotalPages} onClick={() => { if (isFiltering) setPage(p => p + 1); else fetchQuestions(page + 1); }}>
               Next
             </Button>
           </div>

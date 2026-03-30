@@ -12,9 +12,10 @@ export default function EditQuestionPage() {
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
-  const titleParam = decodeURIComponent(params.title as string);
-  const isNew = titleParam === "new";
+  const idParam = (params.title as string) || "new"; // Note: URL param is still [title] but contains the ID or "new"
+  const isNew = idParam === "new";
 
+  const [id, setId] = useState("");
   const [title, setTitle] = useState("");
   const [difficulty, setDifficulty] = useState<"Easy" | "Medium" | "Hard">("Easy");
   const [description, setDescription] = useState("");
@@ -23,14 +24,70 @@ export default function EditQuestionPage() {
   const [modelAnswerCode, setModelAnswerCode] = useState("");
   const [modelAnswerLang, setModelAnswerLang] = useState<string>("");
   const [version, setVersion] = useState(1);
+  const [images, setImages] = useState<string[]>([]);
+  const [imageError, setImageError] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(!isNew);
   const [error, setError] = useState("");
 
+  const MAX_IMAGES = 3;
+  const MAX_IMAGE_SIZE = 4 * 1024 * 1024;
+
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result;
+        if (typeof result === "string") {
+          resolve(result);
+        } else {
+          reject(new Error("Unable to read file as Base64."));
+        }
+      };
+      reader.onerror = () => reject(new Error("Failed to read image file."));
+      reader.readAsDataURL(file);
+    });
+
+  const handleImagesSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    setImageError("");
+    const files = Array.from(event.target.files ?? []);
+    if (files.length === 0) return;
+
+    if (images.length + files.length > MAX_IMAGES) {
+      setImageError(`Please select at most ${MAX_IMAGES} images.`);
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      const nextImages = await Promise.all(
+        files.map(async (file) => {
+          if (!file.type.startsWith("image/")) {
+            throw new Error(`'${file.name}' is not a supported image file.`);
+          }
+          if (file.size > MAX_IMAGE_SIZE) {
+            throw new Error(`'${file.name}' exceeds the 4 MB limit.`);
+          }
+          return await fileToBase64(file);
+        }),
+      );
+      setImages((current) => [...current, ...nextImages]);
+    } catch (err) {
+      setImageError(err instanceof Error ? err.message : "Failed to add image files.");
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setImages((current) => current.filter((_, i) => i !== index));
+  };
+
   useEffect(() => {
     if (isNew) return;
-    getQuestion(titleParam)
+    getQuestion(idParam)
       .then((q) => {
+        setId(q._id);
         setTitle(q.title);
         setDifficulty(q.difficulty);
         setDescription(q.description);
@@ -38,12 +95,13 @@ export default function EditQuestionPage() {
         setHints(q.hints.length > 0 ? q.hints : [""]);
         setModelAnswerCode(q.model_answer_code || "");
         setModelAnswerLang(q.model_answer_lang || "");
+        setImages(q.images ?? []);
         setVersion(q.version);
       })
       .catch(() => toast("Failed to load question", "error"))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [titleParam, isNew]);
+  }, [idParam, isNew]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,11 +116,13 @@ export default function EditQuestionPage() {
       const topics = topicsStr.split(",").map((t) => t.trim()).filter(Boolean);
       const filteredHints = hints.filter((h) => h.trim());
       await upsertQuestion({
+        ...(id && { _id: id }),
         title,
         description,
         topics,
         difficulty,
         hints: filteredHints,
+        images: images.length > 0 ? images : undefined,
         model_answer_code: modelAnswerCode || undefined,
         model_answer_lang: modelAnswerLang || undefined,
         version,
@@ -129,14 +189,46 @@ export default function EditQuestionPage() {
           />
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-gray-700">Optional fields:</label>
-            <div className="flex gap-2">
-              {/* TODO: PLACEHOLDER — Implement image upload to object storage */}
-              <Button type="button" variant="outline" size="sm" onClick={() => toast("Image upload not yet implemented", "info")}>
-                Upload Image
-              </Button>
+            <div className="flex flex-col gap-2">
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImagesSelected}
+                className="text-sm text-gray-600"
+              />
+              <p className="text-xs text-slate-500">Upload up to {MAX_IMAGES} images. Each image must be 4 MB or smaller.</p>
             </div>
           </div>
         </div>
+        {imageError && (
+          <div className="rounded-md border border-red-200 bg-red-50 p-3">
+            <p className="text-sm text-red-600">{imageError}</p>
+          </div>
+        )}
+        {images.length > 0 && (
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-gray-700">Selected images</p>
+            <div className="grid grid-cols-3 gap-3">
+              {images.map((image, index) => (
+                <div key={index} className="rounded-lg border border-gray-200 overflow-hidden">
+                  <img src={image} alt={`Selected image ${index + 1}`} className="h-28 w-full object-cover" />
+                  <div className="flex items-center justify-between gap-2 p-2">
+                    <p className="text-xs text-gray-600">Image {index + 1}</p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveImage(index)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium text-gray-700">Hints (up to 3)</label>
