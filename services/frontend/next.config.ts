@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
       { source: "/api/questions-fetch", destination: `${process.env.NEXT_PUBLIC_QUESTION_SERVICE_URL || "http://localhost:8000"}/fetch` },
       { source: "/api/questions-upsert", destination: `${process.env.NEXT_PUBLIC_QUESTION_SERVICE_URL || "http://localhost:8000"}/upsert` },
       { source: "/api/questions-delete", destination: `${process.env.NEXT_PUBLIC_QUESTION_SERVICE_URL || "http://localhost:8000"}/delete` },
+      { source: "/api/ai/:path*", destination: `${process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:5000"}/api/ai/:path*` },
     ];
   },
 };
