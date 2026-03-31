@@ -5,3 +5,5 @@ const { aiRateLimiter } = require("../middleware/rateLimiter");
 const { explainQuestion } = require("../controller/aiController");
 
 router.post("/explain", authenticateToken, aiRateLimiter, explainQuestion);
+
+module.exports = router;
