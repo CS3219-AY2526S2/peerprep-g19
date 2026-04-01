@@ -7,6 +7,7 @@ export interface Question {
   hints: string[];
   model_answer_code?: string;
   model_answer_lang?: string;
+  images?: string[];
   version: number;
   created_at?: string;
   created_by?: string;
@@ -15,6 +16,7 @@ export interface Question {
 }
 
 export interface QuestionUpsertRequest {
+  _id?: string;
   title: string;
   description: string;
   topics: string[];
@@ -22,5 +24,6 @@ export interface QuestionUpsertRequest {
   hints?: string[];
   model_answer_code?: string;
   model_answer_lang?: string;
+  images?: string[];
   version?: number;
 }
