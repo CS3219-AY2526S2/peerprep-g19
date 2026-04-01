@@ -1,62 +1,61 @@
 # User Service Guide
 
-## Overview
+## Setting-up
 
-User Service manages user profiles and authorization roles for PeerPrep.
+> 📝 Note: If you are familiar with MongoDB and wish to use a local instance, please feel free to do so via the **[MongoDB Community Edition](https://www.mongodb.com/docs/manual/administration/install-community/)**. This guide utilizes MongoDB Cloud Services.
+>
+> ⚠️ Important Network Notice: MongoDB Atlas connections are blocked on the NUS network. If you are using MongoDB Atlas, you must disconnect from the NUS network (including NUS Wi-Fi or nVPN) and connect using an alternative network such as phone hotspot. Otherwise, your application will fail to connect to the database even if your connection string is correct.
 
-Current implementation:
+1. Set up a MongoDB Cluster by following the steps in this **[guide](./MongoDBSetup.md)**.
 
-- Authentication and token verification: Firebase Auth (Admin SDK)
-- User profile storage: Firebase Firestore (`users` collection)
-- Role synchronization: Firebase custom claims + Firestore role field
+2. Set up Firebase Admin for backend authentication/authorization by following this **[guide](./FirebaseSetup.md)**.
 
-This service does not currently use MongoDB.
+3. After setting up, go to the **[Clusters](https://cloud.mongodb.com/go?l=https%3A%2F%2Fcloud.mongodb.com%2Fv2%2F%3Cproject%3E%23%2Fclusters)**  Page. You would see a list of the clusters you have set up. Select `Connect` on the cluster you just created earlier on for User Service.
 
----
+    ![alt text](./GuideAssets/ConnectCluster.png)
 
-## Prerequisites
+4. Select the `Drivers` option, as we have to link to a Node.js App (User Service).
 
-- Node.js v20.10.0 or newer
-- Access to the team Firebase project
-- Firebase Admin service account key at:
+    ![alt text](./GuideAssets/DriverSelection.png)
 
-```text
-services/user-service/config/service_key.json
-```
+5. Select `Node.js` in the **Driver** dropdown menu.
+6. Copy the connection string.
 
-Setup guide for Firebase key and project access:
+    > Note, you may see `<password>` in this connection string. We will be replacing this with the admin account password that we created earlier on when setting up the Cluster.
 
-- See [FirebaseSetup.md](FirebaseSetup.md)
+    ![alt text](./GuideAssets/ConnectionString.png)
 
----
+7. In the `user-service` directory, create a copy of the `.env.sample` file and name it `.env`.
 
-## Environment Setup
+8. Update the `DB_CLOUD_URI` of the `.env` file, and paste the string we copied earlier in **step 6**. Also remember to replace the `<db_password>` placeholder with the **actual password**.
 
-1. In `services/user-service`, create `.env` if not present.
-2. Set at least:
+8. Ensure the `JWT_SECRET` variable is set in the `.env` file. This is required for generating authentication tokens during login. You can set it to any random string (e.g., `JWT_SECRET=your_secret_key_here`).
 
-```env
-PORT=3001
-```
-
-Note: Firestore/Firebase Admin credentials are loaded from `config/service_key.json`.
-
----
+> ⚠️ Warning: If the password contains special characters, make sure to URL-encode them before placing them in the connection string. For example, if your password is `P@ssword`, you should replace `@` with `%40`, resulting in `P%40ssword`.
 
 ## Running User Service
 
-From `services/user-service`:
+> 📝 Note: Ensure you have **[Node.js (LTS)](https://nodejs.org/en/download)** installed. At the time of writing, the latest LTS version is `v24.13.0`. Select your operating system, package manager, and Node.js version from the dropdowns at the top of the [page]((https://nodejs.org/en/download)), then follow the provided instructions.
+>
+> ⚠️ Minimum Version Requirement: Use Node.js `v20.10.0` or newer. This project uses the `with { type: "json" }` import attributes syntax in `config/firebase.js`, which is not supported in older Node.js versions.
 
-```sh
-npm install
-npm run dev
-```
+1. Open Command Line/Terminal and navigate into the `user-service` directory.
 
-Or run in production mode:
+    ```sh
+    cd user-service
+    ```
 
-```sh
-npm start
-```
+2. Install all the necessary dependencies by running the command:
+
+    ```sh
+    npm install
+    ```
+
+3. Start the User Service in production mode by running:
+
+    ```sh
+    npm start
+    ```
 
 Default base URL:
 
@@ -119,17 +118,19 @@ Fields:
 
 ### Register User Profile
 
-- Method: `POST`
-- Endpoint: `/auth/register`
-- Headers:
-  - `Authorization: Bearer <FIREBASE_ID_TOKEN>`
-- Body (optional):
+- Purpose: Create a user profile in MongoDB using an already-authenticated Firebase user.
+- HTTP Method: `POST`
+- Endpoint: <http://localhost:3001/auth/register>
+- Headers
+  - Required: `Authorization: Bearer <FIREBASE_ID_TOKEN>`
+- Body
+  - Optional: `username` (string), `name` (string)
 
-```json
-{
-  "username": "sampleUser"
-}
-```
+    ```json
+    {
+      "username": "sampleUser"
+    }
+    ```
 
 Behavior:
 
@@ -157,169 +158,168 @@ Behavior:
 - If email does not exist: returns `200` with a generic message.
 - If email is missing: returns `400`.
 
----
+- Responses:
 
-### Get All Users (Admin only)
+    | Response Code               | Explanation                                  |
+    |-----------------------------|----------------------------------------------|
+    | 201 (Created)               | User registered in MongoDB                   |
+    | 200 (OK)                    | User already registered                      |
+    | 401 (Unauthorized)          | Missing/invalid Firebase ID token            |
+    | 500 (Internal Server Error) | Firebase/database/server error               |
 
-- Method: `GET`
-- Endpoint: `/users`
-- Headers:
-  - `Authorization: Bearer <FIREBASE_ID_TOKEN>`
+### Update User Privilege
 
----
+You need an admin token to use this endpoint.
 
-### Get User by ID
+- Purpose: Update role in MongoDB and sync Firebase custom claim.
+- HTTP Method: `PATCH`
+- Endpoint: <http://localhost:3001/users/{userId}/privilege>
+- Parameters
+  - Required: `userId` (MongoDB Object ID)
+- Headers
+  - Required: `Authorization: Bearer <FIREBASE_ID_TOKEN>`
+  - Auth Rule: Admin users only
+- Body
+  - Required: `role` (string)
+  - Allowed values: `"admin"`, `"user"`
 
-- Method: `GET`
-- Endpoint: `/users/{userId}`
-- Headers:
-  - `Authorization: Bearer <FIREBASE_ID_TOKEN>`
+    ```json
+    {
+      "role": "admin"
+    }
+    ```
 
-Notes:
+- Responses:
 
-- `userId` is Firebase UID (Firestore document id), not a Mongo ObjectId.
-- Admin can fetch any user.
-- Non-admin can only fetch their own user (`req.user.uid === userId`).
+    | Response Code               | Explanation                                  |
+    |-----------------------------|----------------------------------------------|
+    | 200 (OK)                    | Role updated in MongoDB and Firebase claim   |
+    | 400 (Bad Request)           | Missing/invalid role                         |
+    | 401 (Unauthorized)          | Missing/invalid Firebase ID token            |
+    | 403 (Forbidden)             | Caller is not admin                          |
+    | 404 (Not Found)             | User not found                               |
+    | 500 (Internal Server Error) | Database/server error                        |
 
----
+### Get User
+
+- This endpoint allows retrieval of a single user's data from the database using the user's ID.
+
+  > 💡 The user ID refers to the MongoDB Object ID, a unique identifier automatically generated by MongoDB for each document in a collection.
+
+- HTTP Method: `GET`
+
+- Endpoint: <http://localhost:3001/users/{userId}>
+
+- Parameters
+  - Required: `userId` path parameter
+  - Example: `http://localhost:3001/users/60c72b2f9b1d4c3a2e5f8b4c`
+
+- Headers
+
+  - Required: `Authorization: Bearer <FIREBASE_ID_TOKEN>`
+
+  - Explanation: This endpoint requires a Firebase ID token in the request header for authentication and authorization. The server verifies this token with Firebase Admin SDK.
+
+  - Auth Rules:
+
+    - Admin users: Can retrieve any user's data. The server verifies the user associated with the Firebase token is an admin user and allows access to the requested user's data.
+
+    - Non-admin users: Can only retrieve their own data. The server checks if the user ID in the request URL matches the ID of the user associated with the Firebase token. If it matches, the server returns the user's own data.
+
+- Responses:
+
+    | Response Code               | Explanation                                              |
+    |-----------------------------|----------------------------------------------------------|
+    | 200 (OK)                    | Success, user data returned                              |
+    | 401 (Unauthorized)          | Access denied due to missing/invalid/expired token       |
+    | 403 (Forbidden)             | Access denied for non-admin users accessing others' data |
+    | 404 (Not Found)             | User with the specified ID not found                     |
+    | 500 (Internal Server Error) | Database or server error                                 |
+
+### Get All Users
+
+- This endpoint allows retrieval of all users' data from the database.
+- HTTP Method: `GET`
+- Endpoint: <http://localhost:3001/users>
+- Headers
+  - Required: `Authorization: Bearer <FIREBASE_ID_TOKEN>`
+  - Auth Rules:
+
+    - Admin users: Can retrieve all users' data. The server verifies the user associated with the Firebase token is an admin user and allows access to all users' data.
+
+    - Non-admin users: Not allowed access.
+
+- Responses:
+
+    | Response Code               | Explanation                                      |
+    |-----------------------------|--------------------------------------------------|
+    | 200 (OK)                    | Success, all user data returned                  |
+    | 401 (Unauthorized)          | Access denied due to missing/invalid/expired token |
+    | 403 (Forbidden)             | Access denied for non-admin users                |
+    | 500 (Internal Server Error) | Database or server error                         |
 
 ### Update User
 
-- Method: `PATCH`
-- Endpoint: `/users/{userId}`
-- Headers:
-  - `Authorization: Bearer <FIREBASE_ID_TOKEN>`
-- Body:
+- This endpoint allows updating a user and their related data in the database using the user's ID.
 
-```json
-{
-  "username": "newUsername"
-}
-```
+- HTTP Method: `PATCH`
 
-Notes:
+- Endpoint: <http://localhost:3001/users/{userId}>
 
-- Enforces username uniqueness in Firestore.
-- Admin can update any user.
-- Non-admin can only update self.
+- Parameters
+  - Required: `userId` path parameter
 
----
+- Body
+  - Required: `username` (string)
 
-### Update User Privilege (Admin only)
+    ```json
+    {
+      "username": "SampleUserName"
+    }
+    ```
 
-- Method: `PATCH`
-- Endpoint: `/users/{userId}/privilege`
-- Headers:
-  - `Authorization: Bearer <FIREBASE_ID_TOKEN>`
-- Body:
+- Headers
+  - Required: `Authorization: Bearer <FIREBASE_ID_TOKEN>`
+  - Auth Rules:
 
-```json
-{
-  "role": "admin"
-}
-```
+    - Admin users: Can update any user's data. The server verifies the user associated with the Firebase token is an admin user and allows the update of requested user's data.
 
-Behavior:
+    - Non-admin users: Can only update their own data. The server checks if the user ID in the request URL matches the ID of the user associated with the Firebase token. If it matches, the server updates the user's own data.
 
-- Updates role in Firestore.
-- Syncs Firebase custom claim for that user.
+- Responses:
 
----
+    | Response Code               | Explanation                                             |
+    |-----------------------------|---------------------------------------------------------|
+    | 200 (OK)                    | User updated successfully, updated user data returned   |
+    | 400 (Bad Request)           | Missing username or duplicate username                  |
+    | 401 (Unauthorized)          | Access denied due to missing/invalid/expired token      |
+    | 403 (Forbidden)             | Access denied for non-admin users updating others' data |
+    | 404 (Not Found)             | User with the specified ID not found                    |
+    | 500 (Internal Server Error) | Database or server error                                |
 
 ### Delete User
 
-- Method: `DELETE`
-- Endpoint: `/users/{userId}`
-- Headers:
-  - `Authorization: Bearer <FIREBASE_ID_TOKEN>`
+- This endpoint allows deletion of a user and their related data from the database using the user's ID.
+- HTTP Method: `DELETE`
+- Endpoint: <http://localhost:3001/users/{userId}>
+- Parameters
 
-Notes:
+  - Required: `userId` path parameter
+- Headers
 
-- Admin can delete any user.
-- Non-admin can only delete self.
+  - Required: `Authorization: Bearer <FIREBASE_ID_TOKEN>`
 
----
+  - Auth Rules:
 
-### Record Question Attempt
+    - Admin users: Can delete any user's data. The server verifies the user associated with the Firebase token is an admin user and allows the deletion of requested user's data.
 
-- Method: POST
-- Endpoint: /users/{userId}/attempts
-- Headers:
-  - Authorization: Bearer <FIREBASE_ID_TOKEN>
-- Body:
+    - Non-admin users: Can only delete their own data. The server checks if the user ID in the request URL matches the ID of the user associated with the Firebase token. If it matches, the server deletes the user's own data.
+- Responses:
 
-```json
-{
-  "questionTitle": "Two Sum",
-  "topic": "Arrays",
-  "difficulty": "Easy",
-  "status": "solved",
-  "durationSeconds": 420,
-  "language": "python",
-  "sessionId": "session-abc"
-}
-```
-
-Notes:
-
-- Required fields: questionTitle, topic, difficulty.
-- Allowed difficulty: Easy, Medium, Hard.
-- Allowed status: attempted, solved, abandoned.
-- Admin can write any user's attempts.
-- Non-admin can only write their own attempts.
-
----
-
-### Get Question Attempt History
-
-- Method: GET
-- Endpoint: /users/{userId}/attempts
-- Headers:
-  - Authorization: Bearer <FIREBASE_ID_TOKEN>
-- Query params (optional):
-  - limit (default 20, max 100)
-  - cursor (attempt document id for pagination)
-  - topic
-  - difficulty
-  - status
-
----
-
-### Get Question Attempt Summary
-
-- Method: GET
-- Endpoint: /users/{userId}/attempts/summary
-- Headers:
-  - Authorization: Bearer <FIREBASE_ID_TOKEN>
-
-Returns:
-
-- totalAttempts
-- solvedCount
-- attemptedCount
-- abandonedCount
-- solvedRate
-- byTopic
-- byDifficulty
-
----
-
-## Promote First Admin
-
-After a user has registered, promote by Firebase UID:
-
-```sh
-node scripts/firstAdmin.js <firebase_uid> admin
-```
-
-This updates both:
-
-- Firestore `users/{uid}.role`
-- Firebase custom claim `role`
-
----
-
-## Status / Migration Note
-
-If you still see MongoDB references elsewhere in docs, treat them as legacy notes.
-Runtime code path for user-service is Firebase Auth + Firestore.
+    | Response Code               | Explanation                                             |
+    |-----------------------------|---------------------------------------------------------|
+    | 200 (OK)                    | User deleted successfully                               |
+    | 401 (Unauthorized)          | Access denied due to missing/invalid/expired token      |
+    | 403 (Forbidden)             | Access denied for non-admin users deleting others' data |
+    | 404 (Not Found)             | User with the specified ID not found                    |
+    | 500 (Internal Server Error) | Database or server error                                |
