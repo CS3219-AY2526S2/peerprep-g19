@@ -1,5 +1,5 @@
 import admin from "../config/firebase.js";
-import { createUser, findUserByFirebaseUuid } from "../model/repository.js";
+import { createUser, findUserByFirebaseUuid } from "../model/firebase-repository.js";
 import { formatUserResponse } from "./user-controller.js";
 
 // export async function handleLogin(req, res) {
@@ -79,6 +79,32 @@ export async function handleRegister(req, res) {
       data: formatUserResponse(user),
     });
   } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+}
+
+export async function handleForgotPassword(req, res) {
+  try {
+    const email = req.body?.email?.trim();
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    await admin.auth().getUserByEmail(email);
+    const resetLink = await admin.auth().generatePasswordResetLink(email);
+
+    return res.status(200).json({
+      message: "Password reset link generated",
+      data: { resetLink },
+    });
+  } catch (err) {
+    if (err.code === "auth/user-not-found") {
+      return res.status(200).json({
+        message: "If an account with this email exists, a reset link will be generated",
+      });
+    }
+
     return res.status(500).json({ message: err.message });
   }
 }

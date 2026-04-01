@@ -32,34 +32,46 @@ export async function listQuestions(params: ListQuestionsParams = {}): Promise<L
   if (params.topic) searchParams.set("topic", params.topic);
 
   const qs = searchParams.toString();
-  const url = qs ? `/api/questions-list?${qs}` : "/api/questions-list";
+  const url = qs ? `/api/questions?${qs}` : "/api/questions";
   return apiFetch<ListQuestionsResponse>(url);
 }
 
 export async function getQuestionStats(): Promise<QuestionStats> {
-  return apiFetch<QuestionStats>("/api/questions-stats");
+  return apiFetch<QuestionStats>("/api/questions/stats");
 }
 
-export async function getQuestion(title: string): Promise<Question> {
-  return apiFetch<Question>(`/api/questions-get/${encodeURIComponent(title)}`);
+export async function getQuestion(titleOrId: string): Promise<Question> {
+  return apiFetch<Question>(`/api/questions/${encodeURIComponent(titleOrId)}`);
 }
 
 export async function upsertQuestion(data: QuestionUpsertRequest) {
-  return apiFetch("/api/questions-upsert", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
+  if (data._id) {
+    return apiFetch(`/api/questions/update/${data._id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  } else {
+    return apiFetch("/api/questions/create", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
 }
 
 export async function deleteQuestion(title: string) {
-  return apiFetch("/api/questions-delete", {
+  return apiFetch("/api/questions/delete", {
     method: "DELETE",
     body: JSON.stringify({ title }),
   });
 }
 
-export async function fetchRandomQuestion(topics: string, difficulty: string): Promise<Question> {
-  return apiFetch<Question>(`/api/questions-fetch?topics=${encodeURIComponent(topics)}&difficulty=${encodeURIComponent(difficulty)}`);
+export async function fetchRandomQuestion(
+  topics: string,
+  difficulty: string,
+): Promise<Question> {
+  return apiFetch<Question>(
+    `/api/questions/fetch?topics=${encodeURIComponent(topics)}&difficulty=${encodeURIComponent(difficulty)}`,
+  );
 }
 
 /**

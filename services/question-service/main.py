@@ -1,8 +1,11 @@
 import os
 import re
+import base64
 import random
 import logging
 import motor.motor_asyncio
+from bson import ObjectId
+from bson.errors import InvalidId
 from typing import Optional, List
 from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Depends
@@ -38,7 +41,12 @@ questions_col = db.questions
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-class QuestionSchema(BaseModel):
+MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024  # 4 MB
+MAX_IMAGES = 3
+VALID_DIFFICULTIES = ("Easy", "Medium", "Hard")
+
+
+class CreateQuestionSchema(BaseModel):
     title: str = Field(..., max_length=100)
     description: str = Field(..., max_length=2000)
     topics: List[str] = Field(..., max_items=3)
@@ -46,7 +54,7 @@ class QuestionSchema(BaseModel):
     difficulty: str
     model_answer_code: Optional[str] = None
     model_answer_lang: Optional[str] = None
-    version: int = Field(default=1)
+    images: List[str] = Field(default=[], description="Base64-encoded images, max 3, each up to 4 MB")
 
     @field_validator('difficulty', mode='before')
     def validate_difficulty(cls, v):
@@ -67,22 +75,35 @@ class QuestionSchema(BaseModel):
             raise ValueError("Invalid language for model answer")
         return v
 
-VALID_DIFFICULTIES = ("Easy", "Medium", "Hard")
+
+class UpdateQuestionSchema(CreateQuestionSchema):
+    version: int = Field(..., description="Current version of the document for optimistic locking")
 
 
 class DeleteRequest(BaseModel):
     title: str = Field(..., max_length=100)
+
 
 async def get_current_admin(token: str = Depends(oauth2_scheme)):
     """
     Integrate Google/AWS token verification here.
     Returns the user identifier (email/sub) if they have the 'Admin' role.
     """
-    # Pseudo-code for Cloud IDP verification:
-    # decoded_token = verify_cloud_jwt(token)
-    # if "Admin" not in decoded_token['roles']: raise 403
-    # return decoded_token['email']
     return "admin@cloud-idp.com"  # Mocked for implementation
+
+
+def validate_images(images: list[str]) -> None:
+    """Raises HTTPException if image list exceeds count or per-image size limits."""
+    if len(images) > MAX_IMAGES:
+        raise HTTPException(status_code=400, detail=f"Too many images — maximum {MAX_IMAGES} allowed.")
+    for i, img in enumerate(images):
+        raw = img.split(",", 1)[-1] if img.startswith("data:") else img
+        try:
+            decoded_size = len(base64.b64decode(raw, validate=True))
+        except Exception:
+            raise HTTPException(status_code=400, detail=f"Image {i + 1} is not valid base64.")
+        if decoded_size > MAX_IMAGE_SIZE_BYTES:
+            raise HTTPException(status_code=400, detail=f"Image {i + 1} exceeds the 4 MB limit.")
 
 
 @app.on_event("startup")
@@ -92,49 +113,105 @@ async def create_indexes():
     await questions_col.create_index([("topics", ASCENDING)])
 
 
-@app.post("/upsert", status_code=200)
-async def upsert_question(
-    qn: QuestionSchema,
+@app.post("/create", status_code=201)
+async def create_question(
+    qn: CreateQuestionSchema,
     admin_email: str = Depends(get_current_admin),
 ):
-    """
-    Upserts a question directly into MongoDB with optimistic locking.
-    - If no document with the given title exists, inserts a new one.
-    - If a matching title is found, update the updated_at field.
-    - If the title exists but the version doesn't match, rejects with 409 Conflict.
-    """
+    """Creates a new question. Returns 409 Conflict if a question with the same title already exists."""
     if qn.model_answer_code and len(qn.model_answer_code.encode()) > 1_000_000:
         raise HTTPException(status_code=400, detail="Model answer code exceeds 1 MB")
+    validate_images(qn.images)
 
-    data = qn.model_dump()
-    title = data["title"]
-    version = data.get("version", 1)
     now = datetime.now(timezone.utc).isoformat()
+    data = qn.model_dump()
 
-    set_fields = {k: v for k, v in data.items() if k != "title"}
-    set_fields.update({"updated_at": now, "updated_by": admin_email, "version": version + 1})
+    doc = {
+        **data,
+        "version": 1,
+        "created_at": now,
+        "created_by": admin_email,
+        "updated_at": now,
+        "updated_by": admin_email,
+    }
+
+    try:
+        existing = await questions_col.find_one({"title": data["title"]})
+        if existing:
+            raise HTTPException(status_code=409, detail=f"Question '{data['title']}' already exists.")
+        result = await questions_col.insert_one(doc)
+    except HTTPException:
+        raise
+    except PyMongoError as exc:
+        logger.error("MongoDB error during create for '%s': %s", data["title"], exc)
+        raise HTTPException(status_code=503, detail="Database unavailable, please retry later") from exc
+
+    logger.info("Created new question '%s' by %s", data["title"], admin_email)
+    return {"status": "created", "title": data["title"], "id": str(result.inserted_id), "version": 1}
+
+
+@app.put("/update/{question_id}", status_code=200)
+async def update_question(
+    question_id: str,
+    qn: UpdateQuestionSchema,
+    admin_email: str = Depends(get_current_admin),
+):
+    """Updates an existing question by ID with optimistic locking."""
+    if qn.model_answer_code and len(qn.model_answer_code.encode()) > 1_000_000:
+        raise HTTPException(status_code=400, detail="Model answer code exceeds 1 MB")
+    validate_images(qn.images)
+
+    try:
+        obj_id = ObjectId(question_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail=f"Invalid question ID format: '{question_id}'")
+
+    now = datetime.now(timezone.utc).isoformat()
+    data = qn.model_dump()
+    current_version = data.pop("version")
+
+    try:
+        title_conflict = await questions_col.find_one({"title": data["title"], "_id": {"$ne": obj_id}})
+    except PyMongoError as exc:
+        logger.error("MongoDB error during title conflict check for '%s': %s", data["title"], exc)
+        raise HTTPException(status_code=503, detail="Database unavailable, please retry later") from exc
+
+    if title_conflict:
+        raise HTTPException(status_code=409, detail=f"Another question with title '{data['title']}' already exists.")
+
+    set_fields = {
+        **data,
+        "updated_at": now,
+        "updated_by": admin_email,
+        "version": current_version + 1,
+    }
 
     try:
         doc = await questions_col.find_one_and_update(
-            {"title": title, "version": version},
-            {
-                "$set": set_fields,
-                "$setOnInsert": {"created_at": now, "created_by": admin_email, "title": title},
-            },
-            upsert=True,
+            {"_id": obj_id, "version": current_version},
+            {"$set": set_fields},
             return_document=ReturnDocument.AFTER,
         )
     except PyMongoError as exc:
-        logger.error("MongoDB error during upsert for '%s': %s", title, exc)
-        raise HTTPException(status_code=409, detail="Write conflict — re-fetch the document and retry.") from exc
+        logger.error("MongoDB error during update for id '%s': %s", question_id, exc)
+        raise HTTPException(status_code=503, detail="Database unavailable, please retry later") from exc
 
-    was_inserted = doc.get("created_at") == now
-    if was_inserted:
-        logger.info("Created new question '%s'", title)
-        return {"status": "created", "title": title, "version": 1}
+    if doc is None:
+        try:
+            exists = await questions_col.find_one({"_id": obj_id})
+        except PyMongoError:
+            exists = None
 
-    logger.info("Updated '%s' → version %d", title, version + 1)
-    return {"status": "updated", "title": title, "version": version + 1}
+        if not exists:
+            raise HTTPException(status_code=404, detail=f"Question with ID '{question_id}' not found.")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Version conflict — document is at version {exists.get('version')}, but version {current_version} was provided. Re-fetch and retry.",
+        )
+
+    logger.info("Updated question id '%s' → version %d by %s", question_id, current_version + 1, admin_email)
+    return {"status": "updated", "id": question_id, "title": doc.get("title"), "version": current_version + 1}
+
 
 @app.delete("/delete", status_code=200)
 async def delete_question(
@@ -155,13 +232,14 @@ async def delete_question(
     logger.info("Deleted question '%s' by %s", req.title, admin_email)
     return {"status": "deleted", "title": req.title}
 
+
 @app.get("/fetch")
 async def fetch_question(topics: str, difficulty: str):
     """
     Fetches a random matching question directly from MongoDB.
     `topics` is a comma-separated string e.g. ?topics=arrays,graphs
     """
-    if difficulty not in ("Easy", "Medium", "Hard"):
+    if difficulty not in VALID_DIFFICULTIES:
         raise HTTPException(status_code=400, detail="difficulty must be one of: Easy, Medium, Hard")
 
     topic_list = [t.strip() for t in topics.split(",") if t.strip()]
@@ -183,49 +261,6 @@ async def fetch_question(topics: str, difficulty: str):
     choice = random.choice(results)
     choice["_id"] = str(choice["_id"])
     return choice
-
-
-@app.get("/questions")
-async def list_questions(
-    skip: int = 0,
-    limit: int = 20,
-    search: Optional[str] = None,
-    difficulty: Optional[str] = None,
-    topic: Optional[str] = None,
-):
-    """Returns paginated, filterable questions."""
-    if difficulty and difficulty not in VALID_DIFFICULTIES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid difficulty '{difficulty}'. Must be one of: Easy, Medium, Hard",
-        )
-
-    mongo_filter: dict = {}
-    if search:
-        mongo_filter["title"] = {"$regex": re.escape(search), "$options": "i"}
-    if difficulty:
-        mongo_filter["difficulty"] = difficulty
-    if topic:
-        mongo_filter["topics"] = topic
-
-    try:
-        total = await questions_col.count_documents(mongo_filter)
-        cursor = questions_col.find(mongo_filter).sort("title", ASCENDING).skip(skip).limit(limit)
-        results = await cursor.to_list(length=limit)
-    except PyMongoError as exc:
-        logger.error("MongoDB query failed: %s", exc)
-        raise HTTPException(status_code=503, detail="Database unavailable, please retry later") from exc
-
-    for r in results:
-        r["_id"] = str(r["_id"])
-
-    return {
-        "data": results,
-        "total": total,
-        "skip": skip,
-        "limit": limit,
-        "hasMore": skip + limit < total,
-    }
 
 
 @app.get("/questions/stats")
@@ -265,17 +300,68 @@ async def question_stats():
     }
 
 
-@app.get("/questions/{title}")
-async def get_question_by_title(title: str):
-    """Returns a single question by its exact title."""
+@app.get("/questions")
+async def list_questions(
+    skip: int = 0,
+    limit: int = 20,
+    search: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    topic: Optional[str] = None,
+):
+    """Returns paginated, filterable questions."""
+    if skip < 0 or limit < 1 or limit > 100:
+        raise HTTPException(status_code=400, detail="Invalid pagination parameters. limit must be 1-100, skip must be >= 0")
+    if difficulty and difficulty not in VALID_DIFFICULTIES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid difficulty '{difficulty}'. Must be one of: Easy, Medium, Hard",
+        )
+
+    mongo_filter: dict = {}
+    if search:
+        mongo_filter["title"] = {"$regex": re.escape(search), "$options": "i"}
+    if difficulty:
+        mongo_filter["difficulty"] = difficulty
+    if topic:
+        mongo_filter["topics"] = topic
+
     try:
-        doc = await questions_col.find_one({"title": title})
+        total = await questions_col.count_documents(mongo_filter)
+        cursor = questions_col.find(mongo_filter).sort("title", ASCENDING).skip(skip).limit(limit)
+        results = await cursor.to_list(length=limit)
     except PyMongoError as exc:
-        logger.error("MongoDB query failed for '%s': %s", title, exc)
+        logger.error("MongoDB query failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Database unavailable, please retry later") from exc
+
+    for r in results:
+        r["_id"] = str(r["_id"])
+    return {
+        "data": results,
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+        "hasMore": skip + limit < total,
+    }
+
+
+@app.get("/questions/{question_id}")
+async def get_question_by_id(question_id: str):
+    """Returns a single question by its ID."""
+    try:
+        try:
+            obj_id = ObjectId(question_id)
+        except InvalidId:
+            raise HTTPException(status_code=400, detail=f"Invalid question ID format: '{question_id}'")
+
+        doc = await questions_col.find_one({"_id": obj_id})
+    except HTTPException:
+        raise
+    except PyMongoError as exc:
+        logger.error("MongoDB query failed for id '%s': %s", question_id, exc)
         raise HTTPException(status_code=503, detail="Database unavailable, please retry later") from exc
 
     if not doc:
-        raise HTTPException(status_code=404, detail=f"Question '{title}' not found")
+        raise HTTPException(status_code=404, detail=f"Question with ID '{question_id}' not found")
     doc["_id"] = str(doc["_id"])
     return doc
 

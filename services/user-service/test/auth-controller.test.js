@@ -3,6 +3,8 @@ import { createMockRes } from "./test-utils.js";
 
 const verifyIdTokenMock = vi.fn();
 const setCustomUserClaimsMock = vi.fn();
+const getUserByEmailMock = vi.fn();
+const generatePasswordResetLinkMock = vi.fn();
 const createUserMock = vi.fn();
 const findUserByFirebaseUuidMock = vi.fn();
 
@@ -11,11 +13,13 @@ vi.mock("../config/firebase.js", () => ({
     auth: () => ({
       verifyIdToken: verifyIdTokenMock,
       setCustomUserClaims: setCustomUserClaimsMock,
+      getUserByEmail: getUserByEmailMock,
+      generatePasswordResetLink: generatePasswordResetLinkMock,
     }),
   },
 }));
 
-vi.mock("../model/repository.js", () => ({
+vi.mock("../model/firebase-repository.js", () => ({
   createUser: createUserMock,
   findUserByFirebaseUuid: findUserByFirebaseUuidMock,
 }));
@@ -24,7 +28,9 @@ vi.mock("../controller/user-controller.js", () => ({
   formatUserResponse: (user) => user,
 }));
 
-const { handleRegister } = await import("../controller/auth-controller.js");
+const { handleForgotPassword, handleRegister } = await import(
+  "../controller/auth-controller.js"
+);
 
 describe("auth-controller Firebase flow", () => {
   beforeEach(() => {
@@ -108,5 +114,52 @@ describe("auth-controller Firebase flow", () => {
 
     expect(res.statusCode).toBe(500);
     expect(res.body.message).toBe("invalid token");
+  });
+
+  it("handleForgotPassword returns 400 when email is missing", async () => {
+    const req = { body: {} };
+    const res = createMockRes();
+
+    await handleForgotPassword(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toBe("Email is required");
+    expect(getUserByEmailMock).not.toHaveBeenCalled();
+    expect(generatePasswordResetLinkMock).not.toHaveBeenCalled();
+  });
+
+  it("handleForgotPassword returns reset link when email exists", async () => {
+    getUserByEmailMock.mockResolvedValueOnce({ uid: "firebase-uid-1" });
+    generatePasswordResetLinkMock.mockResolvedValueOnce(
+      "https://example.com/reset-link"
+    );
+
+    const req = { body: { email: "user@example.com" } };
+    const res = createMockRes();
+
+    await handleForgotPassword(req, res);
+
+    expect(getUserByEmailMock).toHaveBeenCalledWith("user@example.com");
+    expect(generatePasswordResetLinkMock).toHaveBeenCalledWith("user@example.com");
+    expect(res.statusCode).toBe(200);
+    expect(res.body.message).toBe("Password reset link generated");
+    expect(res.body.data.resetLink).toBe("https://example.com/reset-link");
+  });
+
+  it("handleForgotPassword returns generic success when user is not found", async () => {
+    const err = new Error("missing user");
+    err.code = "auth/user-not-found";
+    getUserByEmailMock.mockRejectedValueOnce(err);
+
+    const req = { body: { email: "missing@example.com" } };
+    const res = createMockRes();
+
+    await handleForgotPassword(req, res);
+
+    expect(generatePasswordResetLinkMock).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(200);
+    expect(res.body.message).toBe(
+      "If an account with this email exists, a reset link will be generated"
+    );
   });
 });

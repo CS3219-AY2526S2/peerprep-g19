@@ -59,8 +59,48 @@ Before you begin, ensure you have the following installed:
 2.  **Docker Desktop**: Required for running containerized services like the Question Service.
 3.  **pnpm**: Required for the Frontend service. Install via `npm install -g pnpm`.
 4.  **MongoDB Atlas Account**: A cloud-hosted MongoDB is required for the User and Question services.
+5.  **Redis**: Required for the Matching Service. Install via:
+   - **macOS**: `brew install redis && brew services start redis`
+   - **Linux**: `sudo apt install redis-server && sudo systemctl start redis-server`
+   - **Windows**: Use Docker: `docker run -d --name redis -p 6379:6379 redis`
 
 > ** Network Warning:** MongoDB Atlas connections are often blocked on restricted networks (e.g., university Wi-Fi). If you encounter connection issues, try using a different network like a personal hotspot.
+
+### Quick Start (All Services)
+
+For a faster setup, follow these steps to get all services running:
+
+1. **Set up MongoDB Atlas** (see detailed steps below)
+2. **Set up Firebase** (see detailed steps below)
+3. **Install Redis** (see prerequisites above)
+4. **Clone and navigate to project:**
+   ```bash
+   git clone <repository-url>
+   cd peerprep-g19
+   ```
+5. **Start all services in order:**
+   ```bash
+   # Terminal 1: User Service
+   cd services/user-service
+   npm install && npm run dev
+   
+   # Terminal 2: Question Service
+   cd services/question-service
+   docker compose up --build
+   
+   # Terminal 3: Collaboration Service
+   cd services/collaboration
+   npm install && npm run dev
+   
+   # Terminal 4: Matching Service
+   cd services/matching-service
+   npm install && npm run dev
+   
+   # Terminal 5: Frontend Service
+   cd services/frontend
+   pnpm install && pnpm dev
+   ```
+6. **Access the application:** Open http://localhost:3000 in your browser
 
 ### 1. Database Setup (MongoDB)
 
@@ -140,7 +180,42 @@ Handles user matching and queue management with Redis.
     npm run dev
     ```
 
-### 6. Frontend Service (Port: 3000)
+### 6. Firebase Setup (Required for Frontend)
+
+The frontend requires Firebase for user authentication. You'll need to:
+
+1.  **Access Firebase Console**: Go to [Firebase Console](https://console.firebase.google.com/)
+2.  **Select Project**: Use the existing project `peer-prep-1186f` (ask maintainer for access)
+3.  **Get Firebase Configuration**: 
+    - Click the gear icon ⚙️ next to "Project Overview"
+    - Select "Project settings"
+    - Scroll to "Your apps" section
+    - Copy the Firebase configuration values
+
+4.  **Configure Frontend Environment**:
+    ```bash
+    cd services/frontend
+    cp .env.local.example .env.local
+    ```
+    
+    Add the following to `.env.local`:
+    ```env
+    # Service URLs
+    NEXT_PUBLIC_USER_SERVICE_URL=http://localhost:3001
+    NEXT_PUBLIC_QUESTION_SERVICE_URL=http://localhost:8000
+    NEXT_PUBLIC_PARTYKIT_HOST=localhost:1999
+    NEXT_PUBLIC_MATCHING_SERVICE_URL=http://localhost:3002/api/v1
+    
+    # Firebase Configuration (replace with your values)
+    NEXT_PUBLIC_FIREBASE_API_KEY=your-api-key-here
+    NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=peer-prep-1186f.firebaseapp.com
+    NEXT_PUBLIC_FIREBASE_PROJECT_ID=peer-prep-1186f
+    NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=peer-prep-1186f.appspot.com
+    NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-sender-id-here
+    NEXT_PUBLIC_FIREBASE_APP_ID=your-app-id-here
+    ```
+
+### 7. Frontend Service (Port: 3000)
 
 The main user interface for the application.
 
@@ -148,21 +223,60 @@ The main user interface for the application.
     ```bash
     cd services/frontend
     ```
-2.  Create a `.env.local` file with the correct service URLs:
-    ```env
-    # In services/frontend/.env.local
-    NEXT_PUBLIC_USER_SERVICE_URL=http://localhost:3001
-    NEXT_PUBLIC_QUESTION_SERVICE_URL=http://localhost:8000
-    NEXT_PUBLIC_PARTYKIT_HOST=localhost:1999
-    ```
-3.  Install dependencies and start the service:
+2.  Install dependencies and start the service:
     ```bash
     pnpm install
     pnpm dev
     ```
 
-### 7. Verification
+### 7. Service Dependencies and Startup Order
 
-Once all services are running, open your browser and navigate to **http://localhost:3000**. You should be able to register, log in, and view questions.
+**Important**: Services must be started in the correct order due to dependencies:
 
-> **Note**: The **Matching Service** is not yet implemented and is currently stubbed in the frontend.
+1. **User Service** (Port 3001) - Foundation service for authentication
+2. **Question Service** (Port 8000) - Question repository 
+3. **Collaboration Service** (Port 1999) - Real-time collaboration
+4. **Matching Service** (Port 3002) - User matching (depends on User Service)
+5. **Frontend Service** (Port 3000) - User interface (depends on all services)
+
+### 8. Verification
+
+Once all services are running, open your browser and navigate to **http://localhost:3000**. You should be able to:
+
+1. **Register/Login**: Create an account using Firebase authentication
+2. **View Questions**: Browse the question repository
+3. **Admin Features**: Access admin dashboard (if you have admin privileges)
+
+#### Health Checks
+
+Verify each service is running:
+
+```bash
+# User Service
+curl http://localhost:3001/health
+
+# Question Service  
+curl http://localhost:8000/health
+
+# Matching Service
+curl http://localhost:3002/api/v1/health
+
+# Collaboration Service (WebSocket)
+# Connect to: ws://localhost:1999/party/test
+```
+
+#### Troubleshooting
+
+- **MongoDB Connection Issues**: Check your connection string and network access
+- **Firebase Auth Issues**: Verify Firebase configuration in `.env.local`
+- **Redis Issues**: Ensure Redis is running (`redis-cli ping` should return "PONG")
+- **Service Dependencies**: Start services in the correct order
+
+> **Note**: The **Matching Service** is not yet fully implemented and is currently stubbed in the frontend.
+
+### 9. Development Tips
+
+- **Hot Reload**: Frontend and most services support hot reload for faster development
+- **Environment Variables**: Each service has its own `.env` file - don't commit these
+- **Service Logs**: Check terminal output for each service for debugging information
+- **Docker Cleanup**: Use `docker compose down -v` to clean up Question Service volumes

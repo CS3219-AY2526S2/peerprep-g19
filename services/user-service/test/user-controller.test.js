@@ -10,7 +10,7 @@ const repositoryMocks = {
 
 const setUserRoleClaimMock = vi.fn();
 
-vi.mock("../model/repository.js", () => ({
+vi.mock("../model/firebase-repository.js", () => ({
   deleteUserById: vi.fn(),
   findAllUsers: vi.fn(),
   findUserById: repositoryMocks.findUserById,
@@ -23,9 +23,8 @@ vi.mock("../helper/firebase-auth-helper.js", () => ({
   setUserRoleClaim: setUserRoleClaimMock,
 }));
 
-const { updateUser, updateUserPrivilege } = await import(
-  "../controller/user-controller.js"
-);
+const { updateUser, updateUserPrivilege } =
+  await import("../controller/user-controller.js");
 
 describe("user-controller", () => {
   beforeEach(() => {
