@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
 import { useCollaboration } from "@/hooks/use-collaboration";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { getQuestion } from "@/lib/api/question";
+import { createAttempt } from "@/lib/api/user";
 import {
   SUPPORTED_LANGUAGES,
   LANGUAGE_LABELS,
@@ -28,10 +29,12 @@ function SessionContent() {
   const sessionId = params.id as string;
   const questionTitle = searchParams.get("question") || "";
   const difficulty = searchParams.get("difficulty") || "";
+  const topic = searchParams.get("topic") || "";
 
   const [question, setQuestion] = useState<Question | null>(null);
   const [showEndModal, setShowEndModal] = useState(false);
   const [expandedHint, setExpandedHint] = useState<number | null>(null);
+  const sessionStartRef = useRef<number>(Date.now());
 
   const {
     ytext,
@@ -70,13 +73,36 @@ function SessionContent() {
       });
   }, [questionTitle, difficulty]);
 
-  // Handle session end
+  const recordAttempt = useRef(false);
+
+  const saveAttempt = async () => {
+    if (recordAttempt.current || !user?.id || !questionTitle || !topic || !difficulty) return;
+    recordAttempt.current = true;
+    const durationSeconds = Math.round((Date.now() - sessionStartRef.current) / 1000);
+    try {
+      await createAttempt(user.id, {
+        questionTitle,
+        topic,
+        difficulty: difficulty as "Easy" | "Medium" | "Hard",
+        status: "attempted",
+        durationSeconds,
+        language,
+        sessionId,
+      });
+    } catch {
+      // Non-critical — don't block the redirect
+    }
+  };
+
+  // Handle session end (triggered by the other user or server)
   useEffect(() => {
     if (sessionEnded) {
+      saveAttempt();
       toast(`Session ended by ${endedBy}`, "info");
       setTimeout(() => router.push("/match"), 2000);
     }
-  }, [sessionEnded, endedBy, router, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionEnded]);
 
   // Handle partner disconnect
   useEffect(() => {
@@ -85,8 +111,9 @@ function SessionContent() {
     }
   }, [partnerDisconnected, toast]);
 
-  const handleEndSession = () => {
+  const handleEndSession = async () => {
     setShowEndModal(false);
+    await saveAttempt();
     endSession();
     toast("Session ended", "info");
     setTimeout(() => router.push("/match"), 1000);

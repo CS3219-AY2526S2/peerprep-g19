@@ -113,3 +113,73 @@ export async function deleteUserByUuid(firebaseuuid) {
 export async function deleteUserById(userId) {
   return deleteUserByUuid(userId);
 }
+
+// ── Question Attempt History ──────────────────────────────────────────────────
+
+function attemptsRef(userId) {
+  return admin.firestore().collection("users").doc(userId).collection("question_attempts");
+}
+
+export async function createQuestionAttempt(userId, attemptData) {
+  const VALID_DIFFICULTIES = ["Easy", "Medium", "Hard"];
+  const VALID_STATUSES = ["attempted", "solved", "abandoned"];
+
+  const { questionTitle, topic, difficulty, status, durationSeconds, language, sessionId } = attemptData;
+
+  if (!questionTitle || !topic || !difficulty) {
+    throw Object.assign(new Error("questionTitle, topic, and difficulty are required"), { status: 400 });
+  }
+  if (!VALID_DIFFICULTIES.includes(difficulty)) {
+    throw Object.assign(new Error(`difficulty must be one of: ${VALID_DIFFICULTIES.join(", ")}`), { status: 400 });
+  }
+  if (status && !VALID_STATUSES.includes(status)) {
+    throw Object.assign(new Error(`status must be one of: ${VALID_STATUSES.join(", ")}`), { status: 400 });
+  }
+
+  const now = new Date();
+  const payload = {
+    userId,
+    questionTitle,
+    topic,
+    difficulty,
+    status: status || "attempted",
+    durationSeconds: typeof durationSeconds === "number" && isFinite(durationSeconds) ? Math.max(0, durationSeconds) : null,
+    language: language || null,
+    sessionId: sessionId || null,
+    attemptedAt: now,
+    createdAt: now,
+  };
+
+  const docRef = await attemptsRef(userId).add(payload);
+  return { id: docRef.id, ...payload };
+}
+
+export async function listQuestionAttemptsByUser(userId, { limit = 20, cursor, topic, difficulty, status } = {}) {
+  const VALID_DIFFICULTIES = ["Easy", "Medium", "Hard"];
+  const VALID_STATUSES = ["attempted", "solved", "abandoned"];
+
+  // Apply equality filters before orderBy — required for Firestore composite index resolution
+  let query = attemptsRef(userId);
+
+  if (topic) query = query.where("topic", "==", topic);
+  if (difficulty && VALID_DIFFICULTIES.includes(difficulty)) query = query.where("difficulty", "==", difficulty);
+  if (status && VALID_STATUSES.includes(status)) query = query.where("status", "==", status);
+
+  query = query.orderBy("attemptedAt", "desc");
+
+  // Apply cursor before limit so the page window starts at the right position
+  if (cursor) {
+    const cursorDoc = await attemptsRef(userId).doc(cursor).get();
+    if (cursorDoc.exists) query = query.startAfter(cursorDoc);
+  }
+
+  const pageSize = Math.min(Math.max(1, parseInt(limit, 10) || 20), 100);
+  query = query.limit(pageSize + 1);
+
+  const snapshot = await query.get();
+  const docs = snapshot.docs.slice(0, pageSize);
+  const nextCursor = snapshot.docs.length > pageSize ? docs[docs.length - 1].id : null;
+
+  const data = docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  return { data, nextCursor };
+}
