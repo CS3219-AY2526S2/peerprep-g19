@@ -86,15 +86,18 @@ export async function fetchDeterministicQuestion(
 ): Promise<Question | null> {
   // Fetch all matching questions via pagination (backend caps at 100 per page)
   const PAGE_SIZE = 100;
+  const MAX_PAGES = 50;
   const allQuestions: Question[] = [];
   let skip = 0;
   let hasMore = true;
+  let page = 0;
 
-  while (hasMore) {
+  while (hasMore && page < MAX_PAGES) {
     const response = await listQuestions({ topic, difficulty, limit: PAGE_SIZE, skip });
     allQuestions.push(...response.data);
     hasMore = response.hasMore;
     skip += PAGE_SIZE;
+    page++;
   }
 
   const sorted = allQuestions.sort((a, b) => a.title.localeCompare(b.title));

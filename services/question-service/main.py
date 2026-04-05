@@ -73,8 +73,8 @@ VALID_DIFFICULTIES = ("Easy", "Medium", "Hard")
 class CreateQuestionSchema(BaseModel):
     title: str = Field(..., max_length=100)
     description: str = Field(..., max_length=2000)
-    topics: List[str] = Field(..., max_items=3)
-    hints: List[str] = Field(default=[], max_items=3)
+    topics: List[str] = Field(..., max_length=3)
+    hints: List[str] = Field(default=[], max_length=3)
     difficulty: str
     model_answer_code: Optional[str] = None
     model_answer_lang: Optional[str] = None
