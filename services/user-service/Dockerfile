@@ -31,6 +31,6 @@ COPY routes ./routes
 
 USER appuser
 
-EXPOSE 3001
+EXPOSE 3002
 
 CMD ["node", "server.js"]

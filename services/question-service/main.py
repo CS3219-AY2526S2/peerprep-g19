@@ -29,10 +29,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("question_service")
 
-MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
+MONGO_URL = os.getenv("QN_SERVICE_CLOUD_URI", "mongodb://localhost:27017")
 
 if not MONGO_URL:
-    raise EnvironmentError("MONGO_URL environment variable must be set.")
+    raise EnvironmentError("QN_SERVICE_CLOUD_URI environment variable must be set.")
 
 client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URL, serverSelectionTimeoutMS=5000)
 db = client.peerprep_db
