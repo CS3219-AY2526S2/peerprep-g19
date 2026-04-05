@@ -1,6 +1,6 @@
 import { redisClient } from "../redis/redisClient";
 import { sendEvent, closeConnection } from "../sse/connectionManager";
-import { removeQueueMapping, atomicPopPair } from "../services/queueService";
+import { removeQueueMapping, addUserToQueue, atomicPopPair } from "../services/queueService";
 
 /**
  * Background worker responsible for matching users in queues.
@@ -43,22 +43,29 @@ export function startMatchWorker() {
         // Share the same timestamp so both users compute identical session IDs
         const matchedAt = Date.now();
 
-        sendEvent(user1, {
-          type: "MATCH_FOUND",
-          peer: user2,
-          matchedAt
-        });
+        const sent1 = sendEvent(user1, { type: "MATCH_FOUND", peer: user2, matchedAt });
+        const sent2 = sendEvent(user2, { type: "MATCH_FOUND", peer: user1, matchedAt });
 
-        sendEvent(user2, {
-          type: "MATCH_FOUND",
-          peer: user1,
-          matchedAt
-        });
-
-        // closeConnection triggers the per-connection cleanup callback,
-        // which clears the QUEUE_UPDATE and timeout intervals
-        closeConnection(user1);
-        closeConnection(user2);
+        if (sent1 && sent2) {
+          // Both users received the match — close their SSE connections
+          closeConnection(user1);
+          closeConnection(user2);
+        } else if (sent1 && !sent2) {
+          // user2's connection is dead — re-queue user1
+          console.warn(`${user2} connection lost, re-queuing ${user1}`);
+          sendEvent(user1, { type: "QUEUE_UPDATE", position: 1, queueLength: 1 });
+          await addUserToQueue(user1, queueKey);
+        } else if (!sent1 && sent2) {
+          // user1's connection is dead — re-queue user2
+          console.warn(`${user1} connection lost, re-queuing ${user2}`);
+          sendEvent(user2, { type: "QUEUE_UPDATE", position: 1, queueLength: 1 });
+          await addUserToQueue(user2, queueKey);
+        } else {
+          // Both connections dead — nothing to do
+          console.warn(`Both ${user1} and ${user2} connections lost`);
+          closeConnection(user1);
+          closeConnection(user2);
+        }
 
       }
 

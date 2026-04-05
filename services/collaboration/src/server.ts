@@ -13,6 +13,8 @@ import { verifyToken } from "./firebase.js";
 
 export default class CollaborationServer implements Party.Server {
   private session = createSession();
+  // Map connectionId → verified uid from JWT (set in onConnect)
+  private verifiedUsers = new Map<string, string>();
 
   constructor(readonly room: Party.Room) {}
 
@@ -27,6 +29,9 @@ export default class CollaborationServer implements Party.Server {
       conn.close(4003, "Unauthorized");
       return;
     }
+
+    // Store the verified uid so we can validate join messages
+    this.verifiedUsers.set(conn.id, user.uid);
 
     // y-partykit handles Yjs document sync
     return onConnect(conn, this.room, {});
@@ -43,6 +48,18 @@ export default class CollaborationServer implements Party.Server {
 
     switch (msg.type) {
       case "join": {
+        if (!msg.userId || !msg.username) {
+          this.send(sender, { type: "error", code: "JOIN_FAILED", message: "userId and username are required" });
+          sender.close(4001, "Missing userId or username");
+          return;
+        }
+        // Verify the claimed userId matches the authenticated token
+        const verifiedUid = this.verifiedUsers.get(sender.id);
+        if (verifiedUid && verifiedUid !== msg.userId) {
+          this.send(sender, { type: "error", code: "JOIN_FAILED", message: "userId does not match authenticated token" });
+          sender.close(4001, "Identity mismatch");
+          return;
+        }
         const result = addUser(this.session, sender.id, msg.userId, msg.username);
         if (!result.ok) {
           this.send(sender, { type: "error", code: "JOIN_FAILED", message: result.error });
@@ -97,6 +114,7 @@ export default class CollaborationServer implements Party.Server {
   }
 
   onClose(conn: Party.Connection) {
+    this.verifiedUsers.delete(conn.id);
     const removed = removeUser(this.session, conn.id);
     if (removed) {
       // TODO: PLACEHOLDER — Add reconnection grace period before broadcasting user-disconnected

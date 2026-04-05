@@ -35,13 +35,18 @@ export function isActiveConnection(email: string, res: Response): boolean {
   return connections.get(email)?.res === res;
 }
 
-export function sendEvent(email: string, data: any) {
+export function sendEvent(email: string, data: any): boolean {
 
   const conn = connections.get(email);
 
-  if (!conn) return;
+  if (!conn) return false;
 
-  conn.res.write(`data: ${JSON.stringify(data)}\n\n`);
+  try {
+    conn.res.write(`data: ${JSON.stringify(data)}\n\n`);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function closeConnection(email: string) {

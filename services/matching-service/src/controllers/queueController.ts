@@ -12,10 +12,23 @@ const TIMEOUT_MS = parseInt(process.env.MATCHING_TIMEOUT_MS || process.env.TIMEO
 /**
  * User joins matchmaking queue and opens SSE stream.
  */
+const VALID_DIFFICULTIES = ["Easy", "Medium", "Hard"];
+
 export async function joinQueue(req: Request, res: Response) {
 
-  const email = (req as any).user!.email;
+  const email = (req as any).user?.email;
+  if (!email) {
+    return res.status(401).json({ error: "Authentication required" });
+  }
+
   const { topic, difficulty } = req.body;
+
+  if (!topic || typeof topic !== "string" || topic.length > 100) {
+    return res.status(400).json({ error: "Invalid topic" });
+  }
+  if (!difficulty || !VALID_DIFFICULTIES.includes(difficulty)) {
+    return res.status(400).json({ error: "Invalid difficulty. Must be one of: Easy, Medium, Hard" });
+  }
 
   const queueKey = `queue:${topic}:${difficulty}`;
 
@@ -65,7 +78,6 @@ export async function joinQueue(req: Request, res: Response) {
       res.write(`data: ${JSON.stringify({
         type: "QUEUE_UPDATE",
         position,
-        top5: queue.slice(-5).reverse(),
         queueLength: queue.length
       })}\n\n`);
     } catch (err) {
