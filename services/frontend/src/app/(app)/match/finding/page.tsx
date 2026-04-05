@@ -71,7 +71,7 @@ function FindingMatchContent() {
             : "";
 
           router.push(
-            `/session/${sessionId}?question=${questionParam}&difficulty=${encodeURIComponent(difficulty)}`,
+            `/session/${sessionId}?question=${questionParam}&difficulty=${encodeURIComponent(difficulty)}&topic=${encodeURIComponent(topic)}`,
           );
         } catch {
           toast("Matched but failed to load session. Please try again.", "error");

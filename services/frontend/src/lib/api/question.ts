@@ -1,30 +1,77 @@
 import { apiFetch } from "./client";
 import type { Question, QuestionUpsertRequest } from "@/types/question";
 
-export async function listQuestions(): Promise<Question[]> {
-  return apiFetch<Question[]>("/api/questions-list");
+export interface ListQuestionsParams {
+  skip?: number;
+  limit?: number;
+  search?: string;
+  difficulty?: string;
+  topic?: string;
 }
 
-export async function getQuestion(title: string): Promise<Question> {
-  return apiFetch<Question>(`/api/questions-get/${encodeURIComponent(title)}`);
+export interface ListQuestionsResponse {
+  data: Question[];
+  total: number;
+  skip: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+export interface QuestionStats {
+  total: number;
+  difficulty_counts: Record<string, number>;
+  topics: string[];
+}
+
+export async function listQuestions(params: ListQuestionsParams = {}): Promise<ListQuestionsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params.skip != null) searchParams.set("skip", String(params.skip));
+  if (params.limit != null) searchParams.set("limit", String(params.limit));
+  if (params.search) searchParams.set("search", params.search);
+  if (params.difficulty) searchParams.set("difficulty", params.difficulty);
+  if (params.topic) searchParams.set("topic", params.topic);
+
+  const qs = searchParams.toString();
+  const url = qs ? `/api/questions?${qs}` : "/api/questions";
+  return apiFetch<ListQuestionsResponse>(url);
+}
+
+export async function getQuestionStats(): Promise<QuestionStats> {
+  return apiFetch<QuestionStats>("/api/questions/stats");
+}
+
+export async function getQuestion(titleOrId: string): Promise<Question> {
+  return apiFetch<Question>(`/api/questions/${encodeURIComponent(titleOrId)}`);
 }
 
 export async function upsertQuestion(data: QuestionUpsertRequest) {
-  return apiFetch("/api/questions-upsert", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
+  if (data._id) {
+    return apiFetch(`/api/questions/update/${data._id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  } else {
+    return apiFetch("/api/questions/create", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
 }
 
 export async function deleteQuestion(title: string) {
-  return apiFetch("/api/questions-delete", {
+  return apiFetch("/api/questions/delete", {
     method: "DELETE",
     body: JSON.stringify({ title }),
   });
 }
 
-export async function fetchRandomQuestion(topics: string, difficulty: string): Promise<Question> {
-  return apiFetch<Question>(`/api/questions-fetch?topics=${encodeURIComponent(topics)}&difficulty=${encodeURIComponent(difficulty)}`);
+export async function fetchRandomQuestion(
+  topics: string,
+  difficulty: string,
+): Promise<Question> {
+  return apiFetch<Question>(
+    `/api/questions/fetch?topics=${encodeURIComponent(topics)}&difficulty=${encodeURIComponent(difficulty)}`,
+  );
 }
 
 /**
@@ -37,13 +84,11 @@ export async function fetchDeterministicQuestion(
   difficulty: string,
   sessionId: string,
 ): Promise<Question | null> {
-  const all = await listQuestions();
-  const filtered = all
-    .filter((q) => q.topics.includes(topic) && q.difficulty === difficulty)
-    .sort((a, b) => a.title.localeCompare(b.title));
+  const response = await listQuestions({ topic, difficulty, limit: 500 });
+  const sorted = response.data.sort((a, b) => a.title.localeCompare(b.title));
 
-  if (filtered.length === 0) return null;
+  if (sorted.length === 0) return null;
 
-  const index = parseInt(sessionId.slice(0, 8), 16) % filtered.length;
-  return filtered[index];
+  const index = parseInt(sessionId.slice(0, 8), 16) % sorted.length;
+  return sorted[index];
 }

@@ -4,7 +4,21 @@ function usersRef() {
   return admin.firestore().collection("users");
 }
 
+function attemptsRef() {
+  return admin.firestore().collection("question_attempts");
+}
+
 function normalizeUser(snapshot) {
+  if (!snapshot?.exists) return null;
+
+  const data = snapshot.data();
+  return {
+    id: snapshot.id,
+    ...data,
+  };
+}
+
+function normalizeAttempt(snapshot) {
   if (!snapshot?.exists) return null;
 
   const data = snapshot.data();
@@ -112,4 +126,119 @@ export async function deleteUserByUuid(firebaseuuid) {
 
 export async function deleteUserById(userId) {
   return deleteUserByUuid(userId);
+}
+
+export async function createQuestionAttempt(userId, attemptData) {
+  if (!userId) {
+    throw new Error("userId is required to create question attempt");
+  }
+
+  const now = new Date();
+  const payload = {
+    userId,
+    questionId: attemptData.questionId || null,
+    questionTitle: attemptData.questionTitle,
+    topic: attemptData.topic,
+    difficulty: attemptData.difficulty,
+    status: attemptData.status || "attempted",
+    durationSeconds: attemptData.durationSeconds || null,
+    language: attemptData.language || null,
+    sessionId: attemptData.sessionId || null,
+    attemptedAt: now,
+    createdAt: now,
+  };
+
+  const createdRef = await attemptsRef().add(payload);
+  const created = await createdRef.get();
+  return normalizeAttempt(created);
+}
+
+export async function listQuestionAttemptsByUser(userId, options = {}) {
+  if (!userId) {
+    return { attempts: [], nextCursor: null };
+  }
+
+  const maxLimit = 100;
+  const requestedLimit = Number.parseInt(options.limit, 10);
+  const limit =
+    Number.isNaN(requestedLimit) || requestedLimit <= 0
+      ? 20
+      : Math.min(requestedLimit, maxLimit);
+
+  let query = attemptsRef().where("userId", "==", userId);
+
+  if (options.topic) {
+    query = query.where("topic", "==", options.topic);
+  }
+
+  if (options.difficulty) {
+    query = query.where("difficulty", "==", options.difficulty);
+  }
+
+  if (options.status) {
+    query = query.where("status", "==", options.status);
+  }
+
+  query = query.orderBy("attemptedAt", "desc").limit(limit);
+
+  if (options.startAfter) {
+    const cursorSnapshot = await attemptsRef().doc(options.startAfter).get();
+    if (cursorSnapshot.exists) {
+      query = query.startAfter(cursorSnapshot);
+    }
+  }
+
+  const snapshot = await query.get();
+  const attempts = snapshot.docs.map(normalizeAttempt).filter(Boolean);
+  const nextCursor = attempts.length === limit ? attempts[attempts.length - 1].id : null;
+
+  return { attempts, nextCursor };
+}
+
+export async function getQuestionAttemptSummaryByUser(userId) {
+  if (!userId) {
+    return {
+      totalAttempts: 0,
+      solvedCount: 0,
+      attemptedCount: 0,
+      abandonedCount: 0,
+      solvedRate: 0,
+      byTopic: {},
+      byDifficulty: {},
+    };
+  }
+
+  const snapshot = await attemptsRef().where("userId", "==", userId).get();
+  const attempts = snapshot.docs.map(normalizeAttempt).filter(Boolean);
+
+  const summary = {
+    totalAttempts: attempts.length,
+    solvedCount: 0,
+    attemptedCount: 0,
+    abandonedCount: 0,
+    solvedRate: 0,
+    byTopic: {},
+    byDifficulty: {},
+  };
+
+  for (const attempt of attempts) {
+    if (attempt.status === "solved") summary.solvedCount += 1;
+    if (attempt.status === "attempted") summary.attemptedCount += 1;
+    if (attempt.status === "abandoned") summary.abandonedCount += 1;
+
+    if (attempt.topic) {
+      summary.byTopic[attempt.topic] = (summary.byTopic[attempt.topic] || 0) + 1;
+    }
+
+    if (attempt.difficulty) {
+      summary.byDifficulty[attempt.difficulty] =
+        (summary.byDifficulty[attempt.difficulty] || 0) + 1;
+    }
+  }
+
+  if (summary.totalAttempts > 0) {
+    summary.solvedRate = summary.solvedCount / summary.totalAttempts;
+  }
+
+  return summary;
 }

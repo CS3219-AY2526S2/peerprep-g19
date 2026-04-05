@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
 import { useCollaboration } from "@/hooks/use-collaboration";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { getQuestion } from "@/lib/api/question";
+import { createAttempt } from "@/lib/api/user";
 import { explainCode, type AIExplainResult } from "@/lib/api/ai";
 import {
   SUPPORTED_LANGUAGES,
@@ -29,6 +30,7 @@ function SessionContent() {
   const sessionId = params.id as string;
   const questionTitle = searchParams.get("question") || "";
   const difficulty = searchParams.get("difficulty") || "";
+  const topic = searchParams.get("topic") || "";
 
   const [question, setQuestion] = useState<Question | null>(null);
   const [showEndModal, setShowEndModal] = useState(false);
@@ -36,6 +38,7 @@ function SessionContent() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState<AIExplainResult | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
+  const sessionStartRef = useRef<number>(Date.now());
 
   const {
     ytext,
@@ -61,7 +64,6 @@ function SessionContent() {
     getQuestion(questionTitle)
       .then(setQuestion)
       .catch(() => {
-        // TODO: PLACEHOLDER — Use question data from matching service instead of fetching
         setQuestion({
           _id: "mock",
           title: questionTitle,
@@ -74,13 +76,36 @@ function SessionContent() {
       });
   }, [questionTitle, difficulty]);
 
-  // Handle session end
+  const recordAttempt = useRef(false);
+
+  const saveAttempt = async () => {
+    if (recordAttempt.current || !user?.id || !questionTitle || !topic || !difficulty) return;
+    recordAttempt.current = true;
+    const durationSeconds = Math.round((Date.now() - sessionStartRef.current) / 1000);
+    try {
+      await createAttempt(user.id, {
+        questionTitle,
+        topic,
+        difficulty: difficulty as "Easy" | "Medium" | "Hard",
+        status: "attempted",
+        durationSeconds,
+        language,
+        sessionId,
+      });
+    } catch {
+      // Non-critical — don't block the redirect
+    }
+  };
+
+  // Handle session end (triggered by remote user or server)
   useEffect(() => {
     if (sessionEnded) {
+      saveAttempt();
       toast(`Session ended by ${endedBy}`, "info");
       setTimeout(() => router.push("/match"), 2000);
     }
-  }, [sessionEnded, endedBy, router, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionEnded]);
 
   // Handle partner disconnect
   useEffect(() => {
@@ -115,10 +140,11 @@ function SessionContent() {
     }
   };
 
-  const handleEndSession = () => {
+  const handleEndSession = async () => {
     setShowEndModal(false);
     endSession();
     toast("Session ended", "info");
+    await saveAttempt();
     setTimeout(() => router.push("/match"), 1000);
   };
 
@@ -159,7 +185,8 @@ function SessionContent() {
               <Badge variant="difficulty" difficulty={question.difficulty} className="mb-4">
                 {question.difficulty}
               </Badge>
-{/* AI Assist Panel */}
+
+              {/* AI Assist Panel */}
               <div className="mb-6 rounded-md border border-gray-200 bg-gray-50 p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-gray-800">AI Assist</h3>
@@ -234,7 +261,6 @@ function SessionContent() {
                 )}
               </div>
 
-              
               <div className="prose prose-sm max-w-none mb-6">
                 <p className="whitespace-pre-wrap text-gray-700">{question.description}</p>
               </div>
