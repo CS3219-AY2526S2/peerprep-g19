@@ -2,22 +2,23 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - '6379:6379'
+      - "6379:6379"
     networks:
       - peerprep
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
 
   queue-service:
+    image: ${GHCR_NAMESPACE}/queue-service:latest
     build:
       context: ./services/match-service/queue-service
     networks:
       - peerprep
     ports:
-      - '3003:3003'
+      - "3003:3003"
     environment:
       PORT: 3003
       REDIS_HOST: redis
@@ -29,6 +30,7 @@ services:
     restart: on-failure
 
   match-worker:
+    image: ${GHCR_NAMESPACE}/match-worker:latest
     build:
       context: ./services/match-service/match-worker
     networks:
@@ -43,12 +45,14 @@ services:
     restart: on-failure
 
   user-service:
+    image: ${GHCR_NAMESPACE}/user-service:latest
     build:
       context: ./services/user-service
       dockerfile: Dockerfile
       target: runtime
     environment:
       PORT: 3001
+      FIREBASE_SERVICE_KEY: ${FIREBASE_SERVICE_KEY}
     ports:
       - "3001:3001"
     networks:
@@ -70,11 +74,22 @@ services:
       start_period: 10s
 
   question-service:
+    image: ${GHCR_NAMESPACE}/question-service:latest
     build:
       context: ./services/question-service
       dockerfile: Dockerfile
       target: runtime
-    command: ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    command:
+      [
+        "python",
+        "-m",
+        "uvicorn",
+        "main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+      ]
     environment:
       QN_SERVICE_CLOUD_URI: ${QN_SERVICE_CLOUD_URI}
     ports:
@@ -87,14 +102,20 @@ services:
         limits:
           memory: 512m
     healthcheck:
-      test: ["CMD", "python", "-c",
-             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 10s
 
   frontend:
+    image: ${GHCR_NAMESPACE}/frontend:latest
     build:
       context: ./services/frontend
       dockerfile: Dockerfile
