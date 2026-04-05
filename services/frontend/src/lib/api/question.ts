@@ -84,8 +84,20 @@ export async function fetchDeterministicQuestion(
   difficulty: string,
   sessionId: string,
 ): Promise<Question | null> {
-  const response = await listQuestions({ topic, difficulty, limit: 500 });
-  const sorted = response.data.sort((a, b) => a.title.localeCompare(b.title));
+  // Fetch all matching questions via pagination (backend caps at 100 per page)
+  const PAGE_SIZE = 100;
+  const allQuestions: Question[] = [];
+  let skip = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const response = await listQuestions({ topic, difficulty, limit: PAGE_SIZE, skip });
+    allQuestions.push(...response.data);
+    hasMore = response.hasMore;
+    skip += PAGE_SIZE;
+  }
+
+  const sorted = allQuestions.sort((a, b) => a.title.localeCompare(b.title));
 
   if (sorted.length === 0) return null;
 

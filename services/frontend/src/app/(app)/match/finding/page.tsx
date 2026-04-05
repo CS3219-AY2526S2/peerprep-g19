@@ -59,12 +59,12 @@ function FindingMatchContent() {
         setQueuePosition(position);
         setQueueLength(length);
       },
-      onMatchFound: async (peerEmail) => {
+      onMatchFound: async (peerEmail, matchedAt) => {
         cleanup();
         setMatchFound(true);
 
         try {
-          const sessionId = await generateSessionId(userEmail, peerEmail);
+          const sessionId = await generateSessionId(userEmail, peerEmail, matchedAt);
           const question = await fetchDeterministicQuestion(topic, difficulty, sessionId);
           const questionParam = question
             ? encodeURIComponent(question.title)

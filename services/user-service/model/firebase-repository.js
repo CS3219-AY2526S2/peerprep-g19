@@ -141,9 +141,9 @@ export async function createQuestionAttempt(userId, attemptData) {
     topic: attemptData.topic,
     difficulty: attemptData.difficulty,
     status: attemptData.status || "attempted",
-    durationSeconds: attemptData.durationSeconds || null,
-    language: attemptData.language || null,
-    sessionId: attemptData.sessionId || null,
+    durationSeconds: attemptData.durationSeconds ?? null,
+    language: attemptData.language ?? null,
+    sessionId: attemptData.sessionId ?? null,
     attemptedAt: now,
     createdAt: now,
   };

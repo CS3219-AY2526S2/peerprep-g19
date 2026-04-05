@@ -9,17 +9,24 @@ import {
   getUserCount,
 } from "./session.js";
 import type { ClientMessage, ServerMessage } from "./types.js";
+import { verifyToken } from "./firebase.js";
 
 export default class CollaborationServer implements Party.Server {
   private session = createSession();
 
   constructor(readonly room: Party.Room) {}
 
-  onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
-    // TODO: PLACEHOLDER — Verify JWT against user-service before allowing connection
-    // Currently accepts any connection with a token query param
-    // const token = new URL(ctx.request.url).searchParams.get("token");
-    // if (!token || !verifyJwt(token)) { conn.close(4003, "Unauthorized"); return; }
+  async onConnect(conn: Party.Connection, ctx: Party.ConnectionContext) {
+    const token = new URL(ctx.request.url).searchParams.get("token");
+    if (!token) {
+      conn.close(4003, "Missing token");
+      return;
+    }
+    const user = await verifyToken(token);
+    if (!user) {
+      conn.close(4003, "Unauthorized");
+      return;
+    }
 
     // y-partykit handles Yjs document sync
     return onConnect(conn, this.room, {});
@@ -42,9 +49,22 @@ export default class CollaborationServer implements Party.Server {
           sender.close(4001, result.error);
           return;
         }
+        // Close the old connection if the same user rejoined (e.g., browser refresh)
+        if (result.replacedConnId) {
+          for (const conn of this.room.getConnections()) {
+            if (conn.id === result.replacedConnId) {
+              conn.close(1000, "Replaced by new connection");
+              break;
+            }
+          }
+        }
         const count = getUserCount(this.session);
         // Notify everyone (including the joiner)
         this.broadcastAll({ type: "user-joined", userId: msg.userId, username: msg.username, userCount: count });
+        // Sync current language to the new joiner if it differs from the default
+        if (this.session.language !== "python3") {
+          this.send(sender, { type: "language-changed", language: this.session.language, changedBy: "system" });
+        }
         break;
       }
 

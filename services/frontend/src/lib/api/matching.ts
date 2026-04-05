@@ -5,7 +5,7 @@ const MATCHING_SERVICE_URL =
 
 export interface MatchingCallbacks {
   onQueueUpdate: (position: number, queueLength: number) => void;
-  onMatchFound: (peerEmail: string) => void;
+  onMatchFound: (peerEmail: string, matchedAt: number) => void;
   onTimeout: () => void;
   onError: (error: Error) => void;
 }
@@ -97,7 +97,7 @@ export function connectToMatchingQueue(
                 break;
               case "MATCH_FOUND":
                 eventHandled = true;
-                callbacks.onMatchFound(event.peer);
+                callbacks.onMatchFound(event.peer, event.matchedAt);
                 break;
               case "TIMEOUT":
                 eventHandled = true;

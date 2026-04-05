@@ -4,6 +4,8 @@ import base64
 import random
 import logging
 import motor.motor_asyncio
+import firebase_admin
+from firebase_admin import credentials, auth as firebase_auth
 from bson import ObjectId
 from bson.errors import InvalidId
 from typing import Optional, List
@@ -40,6 +42,28 @@ db = client.peerprep_db
 questions_col = db.questions
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# Initialize Firebase Admin SDK
+try:
+    FIREBASE_SERVICE_KEY = os.getenv("FIREBASE_SERVICE_KEY")
+    if FIREBASE_SERVICE_KEY:
+        import json
+        cred = credentials.Certificate(json.loads(FIREBASE_SERVICE_KEY))
+        firebase_admin.initialize_app(cred)
+    elif os.getenv("FIREBASE_PROJECT_ID") and os.getenv("FIREBASE_CLIENT_EMAIL") and os.getenv("FIREBASE_PRIVATE_KEY"):
+        cred = credentials.Certificate({
+            "type": "service_account",
+            "project_id": os.getenv("FIREBASE_PROJECT_ID"),
+            "client_email": os.getenv("FIREBASE_CLIENT_EMAIL"),
+            "private_key": os.getenv("FIREBASE_PRIVATE_KEY", "").replace("\\n", "\n"),
+            "token_uri": "https://oauth2.googleapis.com/token",
+        })
+        firebase_admin.initialize_app(cred)
+    else:
+        logger.warning("No Firebase credentials configured — admin auth will reject all requests")
+except Exception as exc:
+    logger.error("Failed to initialize Firebase Admin SDK: %s", exc)
+    logger.warning("Admin auth will reject all requests")
 
 MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024  # 4 MB
 MAX_IMAGES = 3
@@ -86,10 +110,20 @@ class DeleteRequest(BaseModel):
 
 async def get_current_admin(token: str = Depends(oauth2_scheme)):
     """
-    Integrate Google/AWS token verification here.
-    Returns the user identifier (email/sub) if they have the 'Admin' role.
+    Verifies Firebase ID token and checks for admin role via custom claims.
+    Returns the user's email if they have the 'admin' role.
     """
-    return "admin@cloud-idp.com"  # Mocked for implementation
+    if not firebase_admin._apps:
+        raise HTTPException(status_code=503, detail="Authentication service not configured")
+    try:
+        decoded = firebase_auth.verify_id_token(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    if decoded.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    return decoded.get("email", decoded.get("uid"))
 
 
 def validate_images(images: list[str]) -> None:
@@ -346,22 +380,20 @@ async def list_questions(
 
 @app.get("/questions/{question_id}")
 async def get_question_by_id(question_id: str):
-    """Returns a single question by its ID."""
+    """Returns a single question by its ObjectId or title."""
     try:
+        # Try ObjectId first, fall back to title lookup
         try:
             obj_id = ObjectId(question_id)
+            doc = await questions_col.find_one({"_id": obj_id})
         except InvalidId:
-            raise HTTPException(status_code=400, detail=f"Invalid question ID format: '{question_id}'")
-
-        doc = await questions_col.find_one({"_id": obj_id})
-    except HTTPException:
-        raise
+            doc = await questions_col.find_one({"title": question_id})
     except PyMongoError as exc:
-        logger.error("MongoDB query failed for id '%s': %s", question_id, exc)
+        logger.error("MongoDB query failed for '%s': %s", question_id, exc)
         raise HTTPException(status_code=503, detail="Database unavailable, please retry later") from exc
 
     if not doc:
-        raise HTTPException(status_code=404, detail=f"Question with ID '{question_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Question '{question_id}' not found")
     doc["_id"] = str(doc["_id"])
     return doc
 

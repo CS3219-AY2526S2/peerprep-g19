@@ -11,37 +11,6 @@ services:
       timeout: 3s
       retries: 5
 
-  queue-service:
-    build:
-      context: ./services/match-service/queue-service
-    networks:
-      - peerprep
-    ports:
-      - '3003:3003'
-    environment:
-      PORT: 3003
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      MATCHING_TIMEOUT_MS: 60000
-    depends_on:
-      redis:
-        condition: service_healthy
-    restart: on-failure
-
-  match-worker:
-    build:
-      context: ./services/match-service/match-worker
-    networks:
-      - peerprep
-    environment:
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      POLL_INTERVAL_MS: 1500
-    depends_on:
-      redis:
-        condition: service_healthy
-    restart: on-failure
-
   user-service:
     build:
       context: ./services/user-service
@@ -49,12 +18,13 @@ services:
       target: runtime
     environment:
       PORT: 3001
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
     ports:
       - "3001:3001"
     networks:
       - peerprep
-    volumes:
-      - ./services/user-service/config/service_key.json:/app/config/service_key.json:ro
     restart: unless-stopped
     healthcheck:
       test:
@@ -77,6 +47,9 @@ services:
     command: ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       QN_SERVICE_CLOUD_URI: ${QN_SERVICE_CLOUD_URI}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
     ports:
       - "8000:8000"
     networks:
@@ -94,14 +67,57 @@ services:
       retries: 3
       start_period: 10s
 
+  matching-service:
+    build:
+      context: ./services/matching-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: 3002
+      REDIS_URL: redis://redis:6379
+      MATCHING_TIMEOUT_MS: 60000
+      WITH_AUTH: "true"
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
+    ports:
+      - "3002:3002"
+    networks:
+      - peerprep
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  collaboration:
+    build:
+      context: ./services/collaboration
+      dockerfile: Dockerfile
+    environment:
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+    ports:
+      - "1999:1999"
+    networks:
+      - peerprep
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./services/frontend
       dockerfile: Dockerfile
+      args:
+        # Client-side vars (baked at build time — browser uses these)
+        NEXT_PUBLIC_MATCHING_SERVICE_URL: http://localhost:3002
+        NEXT_PUBLIC_PARTYKIT_HOST: localhost:1999
+        NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY}
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}
+        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
+        NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID}
     environment:
+      # Server-side vars (read at runtime for Next.js rewrites — use Docker hostnames)
       NEXT_PUBLIC_USER_SERVICE_URL: http://user-service:3001
       NEXT_PUBLIC_QUESTION_SERVICE_URL: http://question-service:8000
-      NEXT_PUBLIC_PARTYKIT_HOST: localhost:1999
     ports:
       - "3000:3000"
     networks:
@@ -109,6 +125,8 @@ services:
     depends_on:
       - user-service
       - question-service
+      - matching-service
+      - collaboration
     restart: unless-stopped
 
 networks:

@@ -10,6 +10,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "jose": "^6.0.11",
     "y-partykit": "^0.0.33",
     "yjs": "^13.6.29"
   },

@@ -1,3 +1,4 @@
+import admin from "../config/firebase.js";
 import {
   deleteUserById,
   findAllUsers,
@@ -119,6 +120,15 @@ export async function deleteUser(req, res) {
     }
 
     await deleteUserById(userId);
+
+    // Also delete the Firebase Auth account so the token is invalidated
+    try {
+      await admin.auth().deleteUser(userId);
+    } catch (authErr) {
+      // Log but don't fail — Firestore record is already deleted
+      console.error(`Failed to delete Firebase Auth account for ${userId}:`, authErr.message);
+    }
+
     return res
       .status(200)
       .json({ message: `Deleted user ${userId} successfully` });

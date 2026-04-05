@@ -40,14 +40,19 @@ export function startMatchWorker() {
         console.log("MATCH FOUND");
         console.log(user1, "<->", user2);
 
+        // Share the same timestamp so both users compute identical session IDs
+        const matchedAt = Date.now();
+
         sendEvent(user1, {
           type: "MATCH_FOUND",
-          peer: user2
+          peer: user2,
+          matchedAt
         });
 
         sendEvent(user2, {
           type: "MATCH_FOUND",
-          peer: user1
+          peer: user1,
+          matchedAt
         });
 
         // closeConnection triggers the per-connection cleanup callback,
