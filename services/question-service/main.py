@@ -1,4 +1,5 @@
 import os
+import re
 import base64
 import random
 import logging
@@ -11,7 +12,7 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, Field, field_validator
-from pymongo import ReturnDocument
+from pymongo import ReturnDocument, ASCENDING
 from pymongo.errors import PyMongoError
 
 app = FastAPI(title="PeerPrep Question Service")
@@ -42,6 +43,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024  # 4 MB
 MAX_IMAGES = 3
+VALID_DIFFICULTIES = ("Easy", "Medium", "Hard")
+
 
 class CreateQuestionSchema(BaseModel):
     title: str = Field(..., max_length=100)
@@ -72,21 +75,20 @@ class CreateQuestionSchema(BaseModel):
             raise ValueError("Invalid language for model answer")
         return v
 
+
 class UpdateQuestionSchema(CreateQuestionSchema):
     version: int = Field(..., description="Current version of the document for optimistic locking")
 
+
 class DeleteRequest(BaseModel):
     title: str = Field(..., max_length=100)
+
 
 async def get_current_admin(token: str = Depends(oauth2_scheme)):
     """
     Integrate Google/AWS token verification here.
     Returns the user identifier (email/sub) if they have the 'Admin' role.
     """
-    # Pseudo-code for Cloud IDP verification:
-    # decoded_token = verify_cloud_jwt(token)
-    # if "Admin" not in decoded_token['roles']: raise 403
-    # return decoded_token['email']
     return "admin@cloud-idp.com"  # Mocked for implementation
 
 
@@ -95,7 +97,6 @@ def validate_images(images: list[str]) -> None:
     if len(images) > MAX_IMAGES:
         raise HTTPException(status_code=400, detail=f"Too many images — maximum {MAX_IMAGES} allowed.")
     for i, img in enumerate(images):
-        # Strip a data URI prefix if present (e.g. "data:image/png;base64,...")
         raw = img.split(",", 1)[-1] if img.startswith("data:") else img
         try:
             decoded_size = len(base64.b64decode(raw, validate=True))
@@ -105,14 +106,19 @@ def validate_images(images: list[str]) -> None:
             raise HTTPException(status_code=400, detail=f"Image {i + 1} exceeds the 4 MB limit.")
 
 
+@app.on_event("startup")
+async def create_indexes():
+    await questions_col.create_index([("title", ASCENDING)])
+    await questions_col.create_index([("difficulty", ASCENDING)])
+    await questions_col.create_index([("topics", ASCENDING)])
+
+
 @app.post("/create", status_code=201)
 async def create_question(
     qn: CreateQuestionSchema,
     admin_email: str = Depends(get_current_admin),
 ):
-    """
-    Creates a new question. Returns 409 Conflict if a question with the same title already exists.
-    """
+    """Creates a new question. Returns 409 Conflict if a question with the same title already exists."""
     if qn.model_answer_code and len(qn.model_answer_code.encode()) > 1_000_000:
         raise HTTPException(status_code=400, detail="Model answer code exceeds 1 MB")
     validate_images(qn.images)
@@ -150,13 +156,7 @@ async def update_question(
     qn: UpdateQuestionSchema,
     admin_email: str = Depends(get_current_admin),
 ):
-    """
-    Updates an existing question by ID with optimistic locking.
-    The request body must include the current `version` number.
-    Returns 409 Conflict if the version doesn't match (i.e. a concurrent update occurred).
-    Returns 404 if no question with the given ID is found.
-    """
-
+    """Updates an existing question by ID with optimistic locking."""
     if qn.model_answer_code and len(qn.model_answer_code.encode()) > 1_000_000:
         raise HTTPException(status_code=400, detail="Model answer code exceeds 1 MB")
     validate_images(qn.images)
@@ -170,7 +170,6 @@ async def update_question(
     data = qn.model_dump()
     current_version = data.pop("version")
 
-    # Ensure no other document already holds the new title
     try:
         title_conflict = await questions_col.find_one({"title": data["title"], "_id": {"$ne": obj_id}})
     except PyMongoError as exc:
@@ -198,7 +197,6 @@ async def update_question(
         raise HTTPException(status_code=503, detail="Database unavailable, please retry later") from exc
 
     if doc is None:
-        # Distinguish between not found and version mismatch
         try:
             exists = await questions_col.find_one({"_id": obj_id})
         except PyMongoError:
@@ -213,6 +211,7 @@ async def update_question(
 
     logger.info("Updated question id '%s' → version %d by %s", question_id, current_version + 1, admin_email)
     return {"status": "updated", "id": question_id, "title": doc.get("title"), "version": current_version + 1}
+
 
 @app.delete("/delete", status_code=200)
 async def delete_question(
@@ -233,13 +232,14 @@ async def delete_question(
     logger.info("Deleted question '%s' by %s", req.title, admin_email)
     return {"status": "deleted", "title": req.title}
 
+
 @app.get("/fetch")
 async def fetch_question(topics: str, difficulty: str):
     """
     Fetches a random matching question directly from MongoDB.
     `topics` is a comma-separated string e.g. ?topics=arrays,graphs
     """
-    if difficulty not in ("Easy", "Medium", "Hard"):
+    if difficulty not in VALID_DIFFICULTIES:
         raise HTTPException(status_code=400, detail="difficulty must be one of: Easy, Medium, Hard")
 
     topic_list = [t.strip() for t in topics.split(",") if t.strip()]
@@ -263,15 +263,71 @@ async def fetch_question(topics: str, difficulty: str):
     return choice
 
 
+@app.get("/questions/stats")
+async def question_stats():
+    """Returns aggregate stats: total count, difficulty breakdown, and unique topics."""
+    try:
+        pipeline = [
+            {
+                "$facet": {
+                    "difficulty_counts": [
+                        {"$group": {"_id": "$difficulty", "count": {"$sum": 1}}}
+                    ],
+                    "topics": [
+                        {"$unwind": "$topics"},
+                        {"$group": {"_id": "$topics"}},
+                        {"$sort": {"_id": 1}},
+                    ],
+                    "total": [{"$count": "count"}],
+                }
+            }
+        ]
+        cursor = questions_col.aggregate(pipeline)
+        result = await cursor.to_list(length=1)
+    except PyMongoError as exc:
+        logger.error("MongoDB aggregation failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Database unavailable, please retry later") from exc
+
+    facets = result[0] if result else {"difficulty_counts": [], "topics": [], "total": []}
+    total = facets["total"][0]["count"] if facets["total"] else 0
+    difficulty_counts = {item["_id"]: item["count"] for item in facets["difficulty_counts"]}
+    topics = [item["_id"] for item in facets["topics"]]
+
+    return {
+        "total": total,
+        "difficulty_counts": difficulty_counts,
+        "topics": topics,
+    }
+
+
 @app.get("/questions")
-async def list_questions(skip: int = 0, limit: int = 20):
-    """Returns paginated questions from the database."""
+async def list_questions(
+    skip: int = 0,
+    limit: int = 20,
+    search: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    topic: Optional[str] = None,
+):
+    """Returns paginated, filterable questions."""
     if skip < 0 or limit < 1 or limit > 100:
         raise HTTPException(status_code=400, detail="Invalid pagination parameters. limit must be 1-100, skip must be >= 0")
-    
+    if difficulty and difficulty not in VALID_DIFFICULTIES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid difficulty '{difficulty}'. Must be one of: Easy, Medium, Hard",
+        )
+
+    mongo_filter: dict = {}
+    if search:
+        mongo_filter["title"] = {"$regex": re.escape(search), "$options": "i"}
+    if difficulty:
+        mongo_filter["difficulty"] = difficulty
+    if topic:
+        mongo_filter["topics"] = topic
+
     try:
-        total = await questions_col.count_documents({})
-        cursor = questions_col.find({}).skip(skip).limit(limit)
+        total = await questions_col.count_documents(mongo_filter)
+        cursor = questions_col.find(mongo_filter).sort("title", ASCENDING).skip(skip).limit(limit)
         results = await cursor.to_list(length=limit)
     except PyMongoError as exc:
         logger.error("MongoDB query failed: %s", exc)
@@ -284,14 +340,13 @@ async def list_questions(skip: int = 0, limit: int = 20):
         "total": total,
         "skip": skip,
         "limit": limit,
-        "hasMore": skip + limit < total
+        "hasMore": skip + limit < total,
     }
 
 
 @app.get("/questions/{question_id}")
 async def get_question_by_id(question_id: str):
     """Returns a single question by its ID."""
-
     try:
         try:
             obj_id = ObjectId(question_id)

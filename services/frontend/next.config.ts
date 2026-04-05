@@ -6,7 +6,8 @@ const nextConfig: NextConfig = {
     return [
       { source: "/api/users/:path*", destination: `${process.env.NEXT_PUBLIC_USER_SERVICE_URL || "http://localhost:3001"}/users/:path*` },
       { source: "/api/auth/:path*", destination: `${process.env.NEXT_PUBLIC_USER_SERVICE_URL || "http://localhost:3001"}/auth/:path*` },
-      // Question service routes - must be ordered from most specific to least specific
+      // Question service routes - most specific first
+      { source: "/api/questions/stats", destination: `${process.env.NEXT_PUBLIC_QUESTION_SERVICE_URL || "http://localhost:8000"}/questions/stats` },
       { source: "/api/questions/fetch", destination: `${process.env.NEXT_PUBLIC_QUESTION_SERVICE_URL || "http://localhost:8000"}/fetch` },
       { source: "/api/questions/delete", destination: `${process.env.NEXT_PUBLIC_QUESTION_SERVICE_URL || "http://localhost:8000"}/delete` },
       { source: "/api/questions/create", destination: `${process.env.NEXT_PUBLIC_QUESTION_SERVICE_URL || "http://localhost:8000"}/create` },
