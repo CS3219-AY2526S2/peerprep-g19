@@ -113,9 +113,9 @@ function SessionContent() {
 
   const handleEndSession = async () => {
     setShowEndModal(false);
-    await saveAttempt();
     endSession();
     toast("Session ended", "info");
+    await saveAttempt();
     setTimeout(() => router.push("/match"), 1000);
   };
 

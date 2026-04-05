@@ -87,6 +87,7 @@ export default class CollaborationServer implements Party.Server {
 
       case "end-session": {
         const user = this.session.users.get(sender.id);
+        if (!user) return; // Only session members can end the session
         endSession(this.session);
         this.broadcastAll({ type: "session-ended", endedBy: user?.username || "unknown" });
         // TODO: PLACEHOLDER — Implement explicit resource cleanup (persist session data, analytics)
@@ -100,12 +101,13 @@ export default class CollaborationServer implements Party.Server {
       }
 
       case "language-change": {
+        const langUser = this.session.users.get(sender.id);
+        if (!langUser) return; // Only session members can change language
         if (changeLanguage(this.session, msg.language)) {
-          const user = this.session.users.get(sender.id);
           this.broadcastAll({
             type: "language-changed",
             language: msg.language,
-            changedBy: user?.username || "unknown",
+            changedBy: langUser.username,
           });
         }
         break;

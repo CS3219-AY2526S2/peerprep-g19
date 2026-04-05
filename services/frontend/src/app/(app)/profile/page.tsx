@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
 import { updateUser, deleteUser } from "@/lib/api/user";
@@ -13,8 +13,16 @@ export default function ProfilePage() {
   const { user, logout } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-  const [username, setUsername] = useState(user?.username || "");
-  const [email, setEmail] = useState(user?.email || "");
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+
+  // Sync form fields when user data loads (useState initial value only runs once)
+  useEffect(() => {
+    if (user) {
+      setUsername(user.username || "");
+      setEmail(user.email || "");
+    }
+  }, [user]);
   const [password, setPassword] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [saving, setSaving] = useState(false);

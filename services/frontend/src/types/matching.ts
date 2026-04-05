@@ -1,7 +1,6 @@
 export interface QueueUpdateEvent {
   type: "QUEUE_UPDATE";
   position: number;
-  top5: string[];
   queueLength: number;
 }
 
