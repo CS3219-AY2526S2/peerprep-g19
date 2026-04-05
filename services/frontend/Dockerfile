@@ -11,6 +11,7 @@ COPY package.json pnpm-lock.yaml ./
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
+COPY env-config.sh ./
 
 # Copy source code
 COPY . .
@@ -40,7 +41,10 @@ RUN pnpm install --frozen-lockfile --prod
 # Copy built application from builder
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/env-config.sh ./env-config.sh
+
+RUN chmod +x ./env-config.sh
 
 EXPOSE 3000
 
-CMD ["pnpm", "start"]
+CMD ["/bin/sh", "-c", "./env-config.sh && pnpm start"]
