@@ -19,7 +19,7 @@ if (!admin.apps.length) {
         privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
       }),
     });
-  } else {
+  } else if (process.env.NODE_ENV !== "test") {
     throw new Error(
       "Firebase credentials missing. Set FIREBASE_SERVICE_KEY (JSON string) or FIREBASE_PROJECT_ID + FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY.",
     );
