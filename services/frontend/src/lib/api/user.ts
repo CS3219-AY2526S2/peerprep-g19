@@ -36,3 +36,20 @@ export async function updateUserPrivilege(id: string, role: "admin" | "user"): P
 export async function deleteUser(id: string): Promise<{ message: string }> {
   return apiFetch(`/api/users/${id}`, { method: "DELETE" });
 }
+
+export interface CreateAttemptPayload {
+  questionTitle: string;
+  topic: string;
+  difficulty: "Easy" | "Medium" | "Hard";
+  status?: "attempted" | "solved" | "abandoned";
+  durationSeconds?: number;
+  language?: string;
+  sessionId?: string;
+}
+
+export async function createAttempt(userId: string, payload: CreateAttemptPayload): Promise<{ message: string; data: unknown }> {
+  return apiFetch(`/api/users/${userId}/attempts`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
