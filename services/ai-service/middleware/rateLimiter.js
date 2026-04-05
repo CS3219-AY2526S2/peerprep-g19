@@ -1,4 +1,4 @@
-const rateLimit = require("express-rate-limit");
+const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 
 const aiRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
@@ -11,7 +11,7 @@ const aiRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    return req.user?.uid || req.ip;
+    return req.user?.uid || ipKeyGenerator(req);
   },
 });
 
