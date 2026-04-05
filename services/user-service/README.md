@@ -68,7 +68,7 @@ http://localhost:3001
 From `services/user-service`:
 
 ```sh
-docker compose -f compose.yaml up --build
+docker compose up --build
 ```
 
 Important:
@@ -79,7 +79,7 @@ Important:
 To stop:
 
 ```sh
-docker compose -f compose.yaml down
+docker compose down
 ```
 
 ---
