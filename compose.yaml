@@ -2,11 +2,11 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - '6379:6379'
+      - "6379:6379"
     networks:
       - peerprep
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -17,7 +17,7 @@ services:
     networks:
       - peerprep
     ports:
-      - '3003:3003'
+      - "3003:3003"
     environment:
       PORT: 3003
       REDIS_HOST: redis
@@ -49,6 +49,8 @@ services:
       target: runtime
     environment:
       PORT: 3001
+    env_file:
+      - .env
     ports:
       - "3001:3001"
     networks:
@@ -74,7 +76,17 @@ services:
       context: ./services/question-service
       dockerfile: Dockerfile
       target: runtime
-    command: ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    command:
+      [
+        "python",
+        "-m",
+        "uvicorn",
+        "main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+      ]
     environment:
       QN_SERVICE_CLOUD_URI: ${QN_SERVICE_CLOUD_URI}
     ports:
@@ -87,8 +99,13 @@ services:
         limits:
           memory: 512m
     healthcheck:
-      test: ["CMD", "python", "-c",
-             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -114,3 +131,4 @@ services:
 networks:
   peerprep:
     driver: bridge
+
