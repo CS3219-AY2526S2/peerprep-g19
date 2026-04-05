@@ -85,7 +85,7 @@ class AIService {
         potentialIssues: Array.isArray(parsed.potentialIssues)
           ? parsed.potentialIssues
           : [],
-        confidence: parsed.confidence || "medium",
+        confidence: parsed.confidence === "high" ? 0.9 : parsed.confidence === "medium" ? 0.6 : 0.3,
       };
     } catch (_err) {
       return {
@@ -93,7 +93,7 @@ class AIService {
         stepByStep: [],
         keyConcepts: [],
         potentialIssues: [],
-        confidence: "low",
+        confidence: 0.3,
       };
     }
   }
@@ -109,13 +109,16 @@ class AIService {
     const focus = options.focus || "general";
     const messages = this.buildPrompt(question, userCode, language, focus);
 
-    const model = this.client.getGenerativeModel({ model: this.model });
+    const systemMessage = messages.find((m) => m.role === "system");
+    const userMessage = messages.find((m) => m.role === "user");
+
+    const model = this.client.getGenerativeModel({
+      model: this.model,
+      systemInstruction: systemMessage ? { parts: [{ text: systemMessage.content }] } : undefined,
+    });
 
     const response = await model.generateContent({
-      contents: messages.map((msg) => ({
-        role: msg.role === "user" ? "user" : "model",
-        parts: [{ text: msg.content }],
-      })),
+      contents: [{ role: "user", parts: [{ text: userMessage.content }] }],
       generationConfig: {
         temperature: this.temperature,
         maxOutputTokens: this.maxTokens,
