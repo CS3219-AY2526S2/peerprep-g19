@@ -33,7 +33,6 @@ export function parseSSEChunk(raw: string): { events: string[]; remainder: strin
 
 /**
  * Connect to the matching service SSE stream.
- * Calls leaveQueue first to handle stale queue entries.
  * Returns an AbortController to cancel the connection.
  */
 export function connectToMatchingQueue(

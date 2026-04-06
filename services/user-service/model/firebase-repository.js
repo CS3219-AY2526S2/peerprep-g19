@@ -136,7 +136,7 @@ export async function createQuestionAttempt(userId, attemptData) {
   const now = new Date();
   const payload = {
     userId,
-    questionId: attemptData.questionId || null,
+    questionId: attemptData.questionId ?? null,
     questionTitle: attemptData.questionTitle,
     topic: attemptData.topic,
     difficulty: attemptData.difficulty,
