@@ -117,6 +117,25 @@ services:
       - peerprep
     restart: unless-stopped
 
+  ai-service:
+    build:
+      context: ./services/ai-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: 5050
+      GOOGLE_GEMINI_API_KEY: ${GOOGLE_GEMINI_API_KEY}
+      QUESTION_SERVICE_URL: http://question-service:8000
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
+    ports:
+      - "5050:5050"
+    networks:
+      - peerprep
+    depends_on:
+      - question-service
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./services/frontend
@@ -125,6 +144,7 @@ services:
         # Server-side rewrites (baked at build time — use Docker internal hostnames)
         NEXT_PUBLIC_USER_SERVICE_URL: http://user-service:3001
         NEXT_PUBLIC_QUESTION_SERVICE_URL: http://question-service:8000
+        NEXT_PUBLIC_AI_SERVICE_URL: http://ai-service:5050
         # Client-side vars (baked at build time — browser reaches these via host ports)
         NEXT_PUBLIC_MATCHING_SERVICE_URL: http://localhost:3002
         NEXT_PUBLIC_PARTYKIT_HOST: localhost:1999
