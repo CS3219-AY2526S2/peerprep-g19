@@ -92,9 +92,18 @@ jobs:
       - name: Build and Push with Compose
         run: |
           # Set the registry namespace so Compose tags images correctly
-          export GHCR_NAMESPACE=ghcr.io/${{ github.repository_owner }}
+          export GHCR_NAMESPACE=$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           docker compose build
           docker compose push
         env:
           QN_SERVICE_CLOUD_URI: ${{ secrets.QN_SERVICE_CLOUD_URI }}
+          NEXT_PUBLIC_USER_SERVICE_URL: ${{ vars.NEXT_PUBLIC_USER_SERVICE_URL }}
+          NEXT_PUBLIC_QUESTION_SERVICE_URL: ${{ vars.NEXT_PUBLIC_QUESTION_SERVICE_URL }}
+          NEXT_PUBLIC_PARTYKIT_HOST: ${{ vars.NEXT_PUBLIC_PARTYKIT_HOST }}
+          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ vars.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID }}
  
