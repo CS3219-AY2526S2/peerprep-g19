@@ -84,15 +84,15 @@ services:
       retries: 3
       start_period: 10s
 
-  matching-service:
+  match-queue-service:
     build:
-      context: ./services/matching-service
-      dockerfile: Dockerfile
+      context: ./services/match-service/queue-service
+      dockerfile: dockerfile
     environment:
       PORT: 3002
-      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       MATCHING_TIMEOUT_MS: 60000
-      WITH_AUTH: "true"
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
       FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
       FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
@@ -104,6 +104,28 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3002/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  match-worker:
+    build:
+      context: ./services/match-service/match-worker
+      dockerfile: dockerfile
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      POLL_INTERVAL_MS: 1500
+    networks:
+      - peerprep
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      replicas: 2
 
   collaboration:
     build:
@@ -161,7 +183,8 @@ services:
     depends_on:
       - user-service
       - question-service
-      - matching-service
+      - match-queue-service
+      - match-worker
       - collaboration
     restart: unless-stopped
 
