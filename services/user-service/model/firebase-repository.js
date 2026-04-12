@@ -157,8 +157,7 @@ export async function updateUserPrivilegeById(userId, role) {
 
     // Return updated user data
     return {
-      id: userId,
-      ...user,
+      id: userId,      ...user,
       role,
       updatedAt: new Date()
     };

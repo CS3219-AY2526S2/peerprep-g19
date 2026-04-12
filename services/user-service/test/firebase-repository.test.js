@@ -54,14 +54,21 @@ function buildCollectionRef() {
   };
 }
 
+vi.mock("../config/firebase.js", () => ({
+  default: {
+    firestore: () => ({
+      collection: () => buildCollectionRef(),
+    }),
+  },
+}));
+
+
 const {
   createUser,
   findUserByEmail,
   findUserByFirebaseUuid,
   findUserByUsernameOrEmail,
   updateUserById,
-  updateUserPrivilegeById,
-  deleteUserById,
 } = await import("../model/firebase-repository.js");
 
 describe("firebase-repository", () => {
