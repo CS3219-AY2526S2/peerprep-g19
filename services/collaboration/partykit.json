@@ -1,5 +1,6 @@
 {
   "name": "peerprep-collab",
   "main": "src/server.ts",
-  "port": 1999
+  "port": 1999,
+  "compatibilityDate": "2025-01-01"
 }

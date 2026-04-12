@@ -92,11 +92,10 @@ export async function handleForgotPassword(req, res) {
     }
 
     await admin.auth().getUserByEmail(email);
-    const resetLink = await admin.auth().generatePasswordResetLink(email);
+    await admin.auth().generatePasswordResetLink(email);
 
     return res.status(200).json({
-      message: "Password reset link generated",
-      data: { resetLink },
+      message: "If an account with this email exists, a password reset email has been sent",
     });
   } catch (err) {
     if (err.code === "auth/user-not-found") {

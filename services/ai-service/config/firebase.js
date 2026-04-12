@@ -1,27 +1,23 @@
-const fs = require("fs");
-const path = require("path");
 const admin = require("firebase-admin");
 
-function loadServiceAccount() {
-  const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH
-    ? path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH)
-    : path.join(__dirname, "service_key.json");
-
-  if (!fs.existsSync(serviceAccountPath)) {
-    throw new Error(
-      `Firebase service account file not found at ${serviceAccountPath}. ` +
-        "Set FIREBASE_SERVICE_ACCOUNT_PATH or FIREBASE_SERVICE_ACCOUNT_JSON.",
-    );
-  }
-
-  return JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
-}
-
 if (!admin.apps.length) {
-  const serviceAccount = loadServiceAccount();
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
+  const serviceKeyJson = process.env.FIREBASE_SERVICE_KEY;
+
+  if (serviceKeyJson) {
+    admin.initializeApp({
+      credential: admin.credential.cert(JSON.parse(serviceKeyJson)),
+    });
+  } else if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+      }),
+    });
+  } else if (process.env.NODE_ENV !== "test") {
+    throw new Error("Firebase credentials missing. Set FIREBASE_SERVICE_KEY or FIREBASE_PROJECT_ID + FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY.");
+  }
 }
 
 module.exports = admin;

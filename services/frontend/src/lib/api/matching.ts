@@ -5,7 +5,7 @@ const MATCHING_SERVICE_URL =
 
 export interface MatchingCallbacks {
   onQueueUpdate: (position: number, queueLength: number) => void;
-  onMatchFound: (peerEmail: string) => void;
+  onMatchFound: (peerEmail: string, matchedAt: number) => void;
   onTimeout: () => void;
   onError: (error: Error) => void;
 }
@@ -33,7 +33,6 @@ export function parseSSEChunk(raw: string): { events: string[]; remainder: strin
 
 /**
  * Connect to the matching service SSE stream.
- * Calls leaveQueue first to handle stale queue entries.
  * Returns an AbortController to cancel the connection.
  */
 export function connectToMatchingQueue(
@@ -97,7 +96,7 @@ export function connectToMatchingQueue(
                 break;
               case "MATCH_FOUND":
                 eventHandled = true;
-                callbacks.onMatchFound(event.peer);
+                callbacks.onMatchFound(event.peer, event.matchedAt);
                 break;
               case "TIMEOUT":
                 eventHandled = true;

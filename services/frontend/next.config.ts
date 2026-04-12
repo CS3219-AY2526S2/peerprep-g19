@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
       { source: "/api/questions/:id", destination: `${process.env.NEXT_PUBLIC_QUESTION_SERVICE_URL || "http://localhost:8000"}/questions/:id` },
       { source: "/api/questions", destination: `${process.env.NEXT_PUBLIC_QUESTION_SERVICE_URL || "http://localhost:8000"}/questions` },
       // AI service
-      { source: "/api/ai/:path*", destination: `${process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:5000"}/api/ai/:path*` },
+      { source: "/api/ai/:path*", destination: `${process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:5050"}/api/ai/:path*` },
     ];
   },
 };
