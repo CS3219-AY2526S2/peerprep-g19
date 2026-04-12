@@ -1,4 +1,5 @@
 import admin from "../config/firebase.js";
+import { USER_ROLES } from "../constants/roles.js";
 
 function usersRef() {
   return admin.firestore().collection("users");
@@ -44,7 +45,7 @@ export async function createUser(userData) {
     firebaseuuid: userData.firebaseuuid,
     email: userData.email,
     username: userData.username,
-    role: userData.role || "user",
+    role: userData.role || USER_ROLES.USER,
     createdAt: now,
     updatedAt: now,
   };
@@ -112,7 +113,7 @@ export async function updateUserPrivilegeById(userId, role) {
 }
 
 export async function promoteUser(firebaseuuid) {
-  return updateUserByUuid(firebaseuuid, { role: "admin" });
+  return updateUserByUuid(firebaseuuid, { role: USER_ROLES.ADMIN });
 }
 
 export async function deleteUserByUuid(firebaseuuid) {
