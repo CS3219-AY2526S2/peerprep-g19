@@ -86,7 +86,7 @@ export async function updateUser(req, res) {
   try {
     const { username } = req.body;
     if (!username) {
-      return res.status(400).json({ message: "username is missing!" });
+      return res.status(400).json({ message: "Username is missing!" });
     }
 
     const userId = req.params.id;
@@ -140,16 +140,10 @@ export async function updateUserPrivilege(req, res) {
       return res.status(400).json({ message: "Invalid role" });
     }
 
-    const user = await findUserById(userId);
-    if (!user) {
-      return res.status(404).json({ message: `User ${userId} not found` });
-    }
-
-    // Update persistent record first
     const updatedUser = await updateUserPrivilegeById(userId, role);
     
-    // Then update Firebase so future tokens have new role
-    await setUserRoleClaim(user.firebaseuuid, role);
+    // Update Firebase so future tokens have new role
+    await setUserRoleClaim(updatedUser.firebaseuuid, role);
 
     return res.status(200).json({
       message: `Updated privilege for user ${userId}`,
@@ -157,6 +151,16 @@ export async function updateUserPrivilege(req, res) {
     });
   } catch (err) {
     console.error(err);
+    
+    // Pass through known error messages from repository
+    if (err.message.includes("not found")) {
+      return res.status(404).json({ message: err.message });
+    }
+    
+    if (err.message.includes("last remaining administrator")) {
+      return res.status(400).json({ message: err.message });
+    }
+
     return res
       .status(500)
       .json({ message: "Unknown error when updating user privilege!" });
@@ -185,21 +189,16 @@ export async function updateUserPrivilege(req, res) {
 export async function deleteUser(req, res) {
   try {
     const userId = req.params.id;
-    const user = await findUserById(userId);
 
-    if (!user) {
+    const deletedUser = await deleteUserById(userId);
+
+    if (!deletedUser) {
       return res.status(404).json({ message: `User ${userId} not found` });
     }
 
-    // Delete our profile record first (this is the source of truth)
-    await deleteUserById(userId);
-
-    // Best effort attempt to also remove Firebase Auth account
-    // Failure here is acceptable and not considered an error
     try {
       await admin.auth().deleteUser(userId);
     } catch (authErr) {
-      // Log but don't fail — Firestore record is already deleted
       console.error(`Failed to delete Firebase Auth account for ${userId}:`, authErr.message);
     }
 
@@ -208,6 +207,12 @@ export async function deleteUser(req, res) {
       .json({ message: `Deleted user ${userId} successfully` });
   } catch (err) {
     console.error(err);
+    
+    // Pass through known error messages from repository
+    if (err.message.includes("last remaining administrator")) {
+      return res.status(400).json({ message: err.message });
+    }
+
     return res
       .status(500)
       .json({ message: "Unknown error when deleting user!" });

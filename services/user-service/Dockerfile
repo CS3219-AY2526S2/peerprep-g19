@@ -19,6 +19,7 @@ COPY helper ./helper
 COPY middleware ./middleware
 COPY model ./model
 COPY routes ./routes
+COPY constants/ ./constants
 
 USER appuser
 EXPOSE 3001
