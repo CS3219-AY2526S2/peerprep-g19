@@ -108,6 +108,21 @@ class DeleteRequest(BaseModel):
     title: str = Field(..., max_length=100)
 
 
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    """
+    Verifies Firebase ID token only. Any authenticated user can access.
+    Returns the user's uid/email.
+    """
+    if not firebase_admin._apps:
+        raise HTTPException(status_code=503, detail="Authentication service not configured")
+    try:
+        decoded = firebase_auth.verify_id_token(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    return decoded.get("email", decoded.get("uid"))
+
+
 async def get_current_admin(token: str = Depends(oauth2_scheme)):
     """
     Verifies Firebase ID token and checks for admin role via custom claims.
@@ -268,7 +283,7 @@ async def delete_question(
 
 
 @app.get("/fetch")
-async def fetch_question(topics: str, difficulty: str):
+async def fetch_question(topics: str, difficulty: str, _: str = Depends(get_current_user)):
     """
     Fetches a random matching question directly from MongoDB.
     `topics` is a comma-separated string e.g. ?topics=arrays,graphs
@@ -298,7 +313,7 @@ async def fetch_question(topics: str, difficulty: str):
 
 
 @app.get("/questions/stats")
-async def question_stats():
+async def question_stats(_: str = Depends(get_current_admin)):
     """Returns aggregate stats: total count, difficulty breakdown, and unique topics."""
     try:
         pipeline = [
@@ -341,6 +356,7 @@ async def list_questions(
     search: Optional[str] = None,
     difficulty: Optional[str] = None,
     topic: Optional[str] = None,
+    _: str = Depends(get_current_user),
 ):
     """Returns paginated, filterable questions."""
     if skip < 0 or limit < 1 or limit > 100:
@@ -379,8 +395,12 @@ async def list_questions(
 
 
 @app.get("/questions/{question_id}")
-async def get_question_by_id(question_id: str):
+async def get_question_by_id(question_id: str, _: str = Depends(get_current_user)):
     """Returns a single question by its ObjectId or title."""
+    # Handle double URL encoding bug
+    import urllib.parse
+    question_id = urllib.parse.unquote(question_id)
+    
     try:
         # Try ObjectId first, fall back to title lookup
         try:
@@ -396,6 +416,36 @@ async def get_question_by_id(question_id: str):
         raise HTTPException(status_code=404, detail=f"Question '{question_id}' not found")
     doc["_id"] = str(doc["_id"])
     return doc
+
+
+@app.get("/topics")
+async def get_all_topics(search: Optional[str] = None, _: str = Depends(get_current_user)):
+    """Returns sorted list of all unique topics across all questions. Supports optional case-insensitive search filter."""
+    try:
+        pipeline = [
+            {"$unwind": "$topics"},
+            {"$group": {"_id": "$topics"}},
+        ]
+        
+        if search:
+            pipeline.append({
+                "$match": {
+                    "_id": {
+                        "$regex": re.escape(search),
+                        "$options": "i"
+                    }
+                }
+            })
+            
+        pipeline.append({"$sort": {"_id": 1}})
+        
+        cursor = questions_col.aggregate(pipeline)
+        result = await cursor.to_list(length=500)
+    except PyMongoError as exc:
+        logger.error("MongoDB aggregation failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Database unavailable, please retry later") from exc
+
+    return [item["_id"] for item in result]
 
 
 @app.get("/health")

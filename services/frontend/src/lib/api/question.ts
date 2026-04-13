@@ -74,6 +74,16 @@ export async function fetchRandomQuestion(
   );
 }
 
+export async function getAllTopics(search?: string): Promise<string[]> {
+  const searchParams = new URLSearchParams();
+  if (search) searchParams.set("search", search);
+  
+  const qs = searchParams.toString();
+  const url = qs ? `/api/topics?${qs}` : "/api/topics";
+  
+  return apiFetch<string[]>(url);
+}
+
 /**
  * Deterministically select a question matching the given topic and difficulty.
  * Uses the sessionId as a seed so both matched users independently pick the same question.
