@@ -125,7 +125,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     deploy:
-      replicas: 2
+      replicas: 1
 
   collaboration:
     build:

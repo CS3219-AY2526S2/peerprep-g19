@@ -6,6 +6,7 @@ import {
   queueKey,
   userMetaKey,
   queueUpdateChannel,
+  pingMatchWorker,
 } from '../services/redis';
 import { addConnection, sendEvent, closeConnection } from '../services/sse';
 import { watchQueue, unwatchQueue } from '../services/broadcaster';
@@ -106,6 +107,8 @@ router.get('/join', authenticate, async (req: AuthRequest, res: Response) => {
 
     // Notify other watchers someone joined
     await redis.publish(channel, JSON.stringify({ topic, difficulty }));
+    // Wake up match worker
+    await pingMatchWorker();
   }
 
   // --- 4. Register SSE connection + broadcaster watcher ---
@@ -169,6 +172,8 @@ router.get('/join', authenticate, async (req: AuthRequest, res: Response) => {
       await redis.del(userMetaKey(userId));
       // Notify remaining watchers the queue shrank
       await redis.publish(channel, '{}');
+      // Wake up match worker
+      await pingMatchWorker();
     }
 
     // Close the SSE connection

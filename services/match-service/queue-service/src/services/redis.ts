@@ -4,6 +4,13 @@ import { config } from '../config';
 export const redis = new Redis(config.redis);
 export const redisSub = new Redis(config.redis);
 
+/**
+ * Notify match worker that queue changed and it should run matching algorithm
+ */
+export async function pingMatchWorker() {
+  await redis.publish('queue:activity', '');
+}
+
 export const queueKey = (topic: string, difficulty: string) =>
   `queue:${topic}:${difficulty}`;
 

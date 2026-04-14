@@ -2,6 +2,7 @@ import Redis from 'ioredis';
 import { config } from '../config';
 
 export const redis = new Redis(config.redis);
+export const redisSub = new Redis(config.redis);
 
 export const queueKey = (topic: string, difficulty: string) =>
   `queue:${topic}:${difficulty}`;
