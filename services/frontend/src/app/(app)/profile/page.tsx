@@ -15,6 +15,12 @@ export default function ProfilePage() {
   const { toast } = useToast();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
 
   // Sync form fields when user data loads (useState initial value only runs once)
   useEffect(() => {
@@ -23,11 +29,6 @@ export default function ProfilePage() {
       setEmail(user.email || "");
     }
   }, [user]);
-  const [password, setPassword] = useState("");
-  const [deleteConfirm, setDeleteConfirm] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState("");
 
   if (!user) return null;
 
@@ -37,8 +38,9 @@ export default function ProfilePage() {
     setError("");
     try {
       const data: Record<string, string> = {};
-      if (username !== user.username) data.username = username;
-      if (email !== user.email) data.email = email;
+      data.username = username;
+      data.email = email;
+
       if (password) data.password = password;
 
       if (Object.keys(data).length === 0) {
@@ -77,16 +79,23 @@ export default function ProfilePage() {
         <Input label="Username" value={username} onChange={(e) => setUsername(e.target.value)} />
         <div>
           <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          {/* TODO: PLACEHOLDER — Email change requires OTP verification via backend */}
-          <p className="mt-1 text-xs text-gray-400">(Email change requires OTP verification)</p>
         </div>
-        <Input
-          label="New Password"
-          type="password"
-          placeholder="••••••••"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <div className="relative">
+          <Input
+            label="New Password"
+            type={showPassword ? "text" : "password"}
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(prev => !prev)}
+            className="absolute right-3 bottom-2.5 text-sm text-gray-500 hover:text-gray-700 cursor-pointer"
+          >
+            {showPassword ? "Hide" : "Show"}
+          </button>
+        </div>
         <Button type="submit" disabled={saving}>
           {saving ? "Saving..." : "Save Changes"}
         </Button>
