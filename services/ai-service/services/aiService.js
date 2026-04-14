@@ -37,12 +37,13 @@ class AIService {
       },
       output_format: {
         summary: "Short plain-English explanation of approach (2-4 lines).",
-        stepByStep: [
-          "Ordered explanation of major blocks/logic decisions.",
-        ],
+        stepByStep: ["Ordered explanation of major blocks/logic decisions."],
         keyConcepts: ["Data structures, algorithmic concepts, syntax ideas."],
         potentialIssues: [
-          "Possible bugs, edge cases, or performance concerns if any.",
+          "Describe the scenrio where the code might fail " +
+            "do not provide specific fixes, line numbers, specific syntax or off by-one error messages " +
+            "Example: How would the code behave if the input array is empty or if there was only 2 elements " +
+            "instead of 'if we that is your range, it may cause an index out of bounds or exclusion of the last element error'.",
         ],
         confidence: "low|medium|high",
       },
@@ -53,6 +54,9 @@ class AIService {
         role: "system",
         content:
           "You explain peer code to students in clear, supportive language. " +
+          "IMPORTANT: Never reveal complete solutions, never write corrected code, " +
+          "never say 'the answer is X'. Guide understanding through questions and concepts. " +
+          "If code is nearly correct, highlight the concept to reconsider — not the fix. " +
           "Be concise, concrete, and avoid hallucinations. If information is missing, say so.",
       },
       {
@@ -81,11 +85,18 @@ class AIService {
       return {
         summary: parsed.summary || "No summary provided.",
         stepByStep: Array.isArray(parsed.stepByStep) ? parsed.stepByStep : [],
-        keyConcepts: Array.isArray(parsed.keyConcepts) ? parsed.keyConcepts : [],
+        keyConcepts: Array.isArray(parsed.keyConcepts)
+          ? parsed.keyConcepts
+          : [],
         potentialIssues: Array.isArray(parsed.potentialIssues)
           ? parsed.potentialIssues
           : [],
-        confidence: parsed.confidence === "high" ? 0.9 : parsed.confidence === "medium" ? 0.6 : 0.3,
+        confidence:
+          parsed.confidence === "high"
+            ? 0.9
+            : parsed.confidence === "medium"
+              ? 0.6
+              : 0.3,
       };
     } catch (_err) {
       return {
@@ -114,7 +125,9 @@ class AIService {
 
     const model = this.client.getGenerativeModel({
       model: this.model,
-      systemInstruction: systemMessage ? { parts: [{ text: systemMessage.content }] } : undefined,
+      systemInstruction: systemMessage
+        ? { parts: [{ text: systemMessage.content }] }
+        : undefined,
     });
 
     const response = await model.generateContent({
@@ -125,9 +138,14 @@ class AIService {
       },
     });
 
-    const rawText = response?.response?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const rawText =
+      response?.response?.candidates?.[0]?.content?.parts?.[0]?.text || "";
     return this.parseModelResponse(rawText);
   }
 }
 
-module.exports = new AIService();
+const instance = new AIService();
+if (!instance.client && process.env.NODE_ENV !== "test") {
+  throw new Error("GOOGLE_GEMINI_API_KEY missing — ai-service cannot start.");
+}
+module.exports = instance;
