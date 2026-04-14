@@ -250,6 +250,64 @@ export async function listQuestionAttemptsByUser(userId, options = {}) {
       ? 20
       : Math.min(requestedLimit, maxLimit);
 
+  const hasOptionalFilters = Boolean(
+    options.topic || options.difficulty || options.status,
+  );
+
+  // Filtered history uses a scan-based strategy so it works even when
+  // composite indexes are missing in local/dev environments.
+  if (hasOptionalFilters) {
+    const batchSize = Math.min(100, Math.max(limit * 2, 20));
+    const results = [];
+    let scanCursor = null;
+
+    if (options.startAfter) {
+      const cursorSnapshot = await attemptsRef().doc(options.startAfter).get();
+      if (cursorSnapshot.exists) {
+        scanCursor = cursorSnapshot;
+      }
+    }
+
+    while (results.length < limit) {
+      let scanQuery = attemptsRef()
+        .where("userId", "==", userId)
+        .orderBy("attemptedAt", "desc")
+        .limit(batchSize);
+
+      if (scanCursor) {
+        scanQuery = scanQuery.startAfter(scanCursor);
+      }
+
+      const snapshot = await scanQuery.get();
+      if (snapshot.empty) {
+        break;
+      }
+
+      for (const doc of snapshot.docs) {
+        const attempt = normalizeAttempt(doc);
+        if (!attempt) continue;
+
+        if (options.topic && attempt.topic !== options.topic) continue;
+        if (options.difficulty && attempt.difficulty !== options.difficulty) continue;
+        if (options.status && attempt.status !== options.status) continue;
+
+        results.push(attempt);
+        if (results.length === limit) {
+          break;
+        }
+      }
+
+      scanCursor = snapshot.docs[snapshot.docs.length - 1] || null;
+
+      if (snapshot.size < batchSize) {
+        break;
+      }
+    }
+
+    const nextCursor = results.length === limit && scanCursor ? scanCursor.id : null;
+    return { attempts: results, nextCursor };
+  }
+
   let query = attemptsRef().where("userId", "==", userId);
 
   if (options.topic) {

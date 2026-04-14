@@ -23,6 +23,8 @@ services/ai-service/*.log
 services/ai-service/config/service_key.json
 services/ai-service/serviceAccountKey.json
 
+services/matching-service/node_modules/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
