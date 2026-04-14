@@ -46,7 +46,11 @@ export function useCollaboration({ sessionId, userId, username }: UseCollaborati
     docRef.current = doc;
 
     const partykitHost = process.env.NEXT_PUBLIC_PARTYKIT_HOST || "localhost:1999";
-    const token = getToken() || "";
+    const token = getToken();
+    if (!token) {
+      console.error("No auth token available — cannot connect to collaboration server");
+      return () => { doc.destroy(); };
+    }
 
     const provider = new YPartyKitProvider(partykitHost, sessionId, doc, {
       connect: true,

@@ -3,13 +3,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install pnpm
 RUN npm install -g pnpm
 
-# Copy package files
 COPY package.json pnpm-lock.yaml ./
-
-# Install dependencies
 RUN pnpm install --frozen-lockfile
 COPY env-config.sh ./
 
@@ -35,26 +31,45 @@ ENV NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=$NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
 ENV NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=$NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
 ENV NEXT_PUBLIC_FIREBASE_APP_ID=$NEXT_PUBLIC_FIREBASE_APP_ID
 
-# Copy source code
 COPY . .
+
+# Server-side rewrites read env vars at runtime, but NEXT_PUBLIC_ vars
+# used client-side must be set at build time
+ARG NEXT_PUBLIC_USER_SERVICE_URL=http://localhost:3001
+ARG NEXT_PUBLIC_QUESTION_SERVICE_URL=http://localhost:8000
+ARG NEXT_PUBLIC_AI_SERVICE_URL=http://localhost:5050
+ARG NEXT_PUBLIC_MATCHING_SERVICE_URL=http://localhost:3002
+ARG NEXT_PUBLIC_PARTYKIT_HOST=localhost:1999
+ARG NEXT_PUBLIC_FIREBASE_API_KEY
+ARG NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+ARG NEXT_PUBLIC_FIREBASE_PROJECT_ID
+ARG NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+ARG NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+ARG NEXT_PUBLIC_FIREBASE_APP_ID
+
+ENV NEXT_PUBLIC_USER_SERVICE_URL=$NEXT_PUBLIC_USER_SERVICE_URL
+ENV NEXT_PUBLIC_QUESTION_SERVICE_URL=$NEXT_PUBLIC_QUESTION_SERVICE_URL
+ENV NEXT_PUBLIC_AI_SERVICE_URL=$NEXT_PUBLIC_AI_SERVICE_URL
+ENV NEXT_PUBLIC_MATCHING_SERVICE_URL=$NEXT_PUBLIC_MATCHING_SERVICE_URL
+ENV NEXT_PUBLIC_PARTYKIT_HOST=$NEXT_PUBLIC_PARTYKIT_HOST
+ENV NEXT_PUBLIC_FIREBASE_API_KEY=$NEXT_PUBLIC_FIREBASE_API_KEY
+ENV NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=$NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+ENV NEXT_PUBLIC_FIREBASE_PROJECT_ID=$NEXT_PUBLIC_FIREBASE_PROJECT_ID
+ENV NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=$NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+ENV NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=$NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+ENV NEXT_PUBLIC_FIREBASE_APP_ID=$NEXT_PUBLIC_FIREBASE_APP_ID
+
 RUN pnpm run build
 
-# Runtime stage
+# Runtime stage — standalone output
 FROM node:20-alpine AS runtime
 
 WORKDIR /app
 
-# Install pnpm
-RUN npm install -g pnpm
-
-# Copy package files
-COPY package.json pnpm-lock.yaml ./
-
-# Install only production dependencies
-RUN pnpm install --frozen-lockfile --prod
-
-# Copy built application from builder
-COPY --from=builder /app/.next ./.next
+# Copy standalone server (includes all needed node_modules)
+COPY --from=builder /app/.next/standalone ./
+# Copy static assets
+COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/env-config.sh ./env-config.sh
 

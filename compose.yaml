@@ -33,16 +33,16 @@ services:
     image: ${GHCR_NAMESPACE}/match-worker:latest
     build:
       context: ./services/match-service/match-worker
-    networks:
-      - peerprep
     environment:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       POLL_INTERVAL_MS: 1500
-    depends_on:
-      redis:
-        condition: service_healthy
-    restart: on-failure
+    networks:
+      - peerprep
+
+    restart: unless-stopped
+    deploy:
+      replicas: 2
 
   user-service:
     image: ${GHCR_NAMESPACE}/user-service:latest
@@ -53,12 +53,13 @@ services:
     environment:
       PORT: 3001
       FIREBASE_SERVICE_KEY: ${FIREBASE_SERVICE_KEY}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
     ports:
       - "3001:3001"
     networks:
       - peerprep
-    volumes:
-      - ./services/user-service/config/service_key.json:/app/config/service_key.json:ro
     restart: unless-stopped
     healthcheck:
       test:
@@ -91,11 +92,17 @@ services:
         "8000",
       ]
     environment:
-      QN_SERVICE_CLOUD_URI: ${QN_SERVICE_CLOUD_URI}
+      QN_SERVICE_CLOUD_URI: ${QN_SERVICE_CLOUD_URI:-mongodb://mongo:27017/peerprep_db}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
     ports:
       - "8000:8000"
     networks:
       - peerprep
+    depends_on:
+      mongo:
+        condition: service_healthy
     restart: unless-stopped
     deploy:
       resources:
@@ -114,6 +121,62 @@ services:
       retries: 3
       start_period: 10s
 
+  match-queue-service:
+    build:
+      context: ./services/match-service/queue-service
+      dockerfile: dockerfile
+    environment:
+      PORT: 3002
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MATCHING_TIMEOUT_MS: 60000
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
+    ports:
+      - "3002:3002"
+    networks:
+      - peerprep
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3002/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+  collaboration:
+    build:
+      context: ./services/collaboration
+      dockerfile: Dockerfile
+    environment:
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+    ports:
+      - "1999:1999"
+    networks:
+      - peerprep
+    restart: unless-stopped
+
+  ai-service:
+    build:
+      context: ./services/ai-service
+      dockerfile: Dockerfile
+    environment:
+      PORT: 5050
+      GOOGLE_GEMINI_API_KEY: ${GOOGLE_GEMINI_API_KEY}
+      QUESTION_SERVICE_URL: http://question-service:8000
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
+    ports:
+      - "5050:5050"
+    networks:
+      - peerprep
+    depends_on:
+      - question-service
+    restart: unless-stopped
+
   frontend:
     image: ${GHCR_NAMESPACE}/frontend:latest
     build:
@@ -130,15 +193,17 @@ services:
         NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
         NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID}
     environment:
-      NEXT_PUBLIC_USER_SERVICE_URL: ${NEXT_PUBLIC_USER_SERVICE_URL}
-      NEXT_PUBLIC_QUESTION_SERVICE_URL: ${NEXT_PUBLIC_QUESTION_SERVICE_URL}
-      NEXT_PUBLIC_PARTYKIT_HOST: ${NEXT_PUBLIC_PARTYKIT_HOST}
-      NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY}
-      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
-      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
-      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}
-      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
-      NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID}
+        NEXT_PUBLIC_USER_SERVICE_URL: http://user-service:3001
+        NEXT_PUBLIC_QUESTION_SERVICE_URL: http://question-service:8000
+        NEXT_PUBLIC_AI_SERVICE_URL: http://ai-service:5050
+        NEXT_PUBLIC_MATCHING_SERVICE_URL: http://localhost:3002
+        NEXT_PUBLIC_PARTYKIT_HOST: localhost:1999
+        NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY}
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}
+        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
+        NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID}
     ports:
       - "3000:3000"
     networks:
@@ -146,8 +211,14 @@ services:
     depends_on:
       - user-service
       - question-service
+      - match-queue-service
+      - match-worker
+      - collaboration
     restart: unless-stopped
 
 networks:
   peerprep:
     driver: bridge
+
+volumes:
+  mongo-data:

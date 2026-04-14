@@ -16,7 +16,7 @@ from httpx import AsyncClient, ASGITransport
 from pymongo.errors import PyMongoError
 from bson import ObjectId
 
-from main import app
+from main import app, get_current_admin
 
 
 # ---------------------------------------------------------------------------
@@ -24,6 +24,16 @@ from main import app
 # ---------------------------------------------------------------------------
 
 VALID_ID = "507f1f77bcf86cd799439011"
+
+
+@pytest.fixture(autouse=True)
+def override_firebase_auth():
+    """Bypass Firebase auth for all tests."""
+    async def mock_admin():
+        return "test@admin.com"
+    app.dependency_overrides[get_current_admin] = mock_admin
+    yield
+    app.dependency_overrides.clear()
 
 @pytest.fixture
 def create_payload():
@@ -630,9 +640,12 @@ class TestGetQuestionById:
         assert response.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_returns_400_for_invalid_id_format(self, client):
-        response = await client.get("/questions/not-a-valid-objectid")
-        assert response.status_code == 400
+    async def test_falls_back_to_title_lookup_for_non_objectid(self, client):
+        """Non-ObjectId strings are treated as titles and looked up by title field."""
+        with patch("main.questions_col") as mock_col:
+            mock_col.find_one = AsyncMock(return_value=None)
+            response = await client.get("/questions/not-a-valid-objectid")
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
     async def test_converts_objectid_to_string(self, client):
