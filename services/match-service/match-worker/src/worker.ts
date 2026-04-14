@@ -1,4 +1,4 @@
-import { config } from './config';
+import { redis, redisSub } from './services/redis';
 import { getAllQueueKeys, tryMatchQueue, publishMatch } from './services/matcher';
 
 async function runMatchCycle() {
@@ -22,14 +22,28 @@ async function runMatchCycle() {
 }
 
 async function start() {
-  console.log('Match worker started');
-  setInterval(async () => {
-    try {
-      await runMatchCycle();
-    } catch (err) {
-      console.error('Match cycle error:', err);
+  console.log('Match worker started in event driven mode');
+
+  // Subscribe to queue activity events
+  await redisSub.subscribe('queue:activity');
+
+  // Run matching algorithm whenever queue changes
+  redisSub.on('message', async (channel) => {
+    if (channel === 'queue:activity') {
+      try {
+        await runMatchCycle();
+      } catch (err) {
+        console.error('Match cycle error:', err);
+      }
     }
-  }, config.pollIntervalMs);
+  });
+
+  // Also run once on startup to clean up any pending matches
+  try {
+    await runMatchCycle();
+  } catch (err) {
+    console.error('Initial match cycle failed:', err);
+  }
 }
 
 start();

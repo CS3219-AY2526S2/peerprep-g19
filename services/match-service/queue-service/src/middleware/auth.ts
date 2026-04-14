@@ -1,10 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
+import admin from 'firebase-admin';
 
 export interface AuthRequest extends Request {
   userId?: string;
+  email?: string;
 }
 
-export function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
+export async function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
 
   if (!authHeader?.startsWith('Bearer ')) {
@@ -19,19 +21,13 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
     return;
   }
 
-  // Decode Firebase JWT payload to extract uid (sub claim).
-  // This is a lightweight check — signature verification is handled by
-  // downstream services that have the Firebase Admin SDK.
-  try {
-    const payloadB64 = token.split('.')[1];
-    if (!payloadB64) throw new Error('Malformed token');
-    const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
-    if (!payload.sub) throw new Error('Missing sub claim');
-    req.userId = payload.sub;
-  } catch {
-    res.status(401).json({ error: 'Invalid token' });
-    return;
-  }
 
-  next();
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(token);
+    req.userId = decodedToken.uid;
+    req.email = decodedToken.email || undefined;
+    next();
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid or expired token' });
+  }
 }

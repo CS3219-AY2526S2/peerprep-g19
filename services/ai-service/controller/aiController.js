@@ -38,7 +38,12 @@ const explainQuestion = async (req, res) => {
 
     const question = await axios.get(
       `${QUESTION_SERVICE_URL}/questions/${encodeURIComponent(questionTitle)}`,
-      { timeout: QUESTION_FETCH_TIMEOUT_MS },
+      {
+        timeout: QUESTION_FETCH_TIMEOUT_MS,
+        headers: {
+          Authorization: req.headers.authorization
+        }
+      },
     );
     if (!question || !question.data) {
       return res.status(404).json({ message: "Question not found" });

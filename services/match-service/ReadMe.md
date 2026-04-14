@@ -25,8 +25,9 @@ Built with Node.js, TypeScript, Express, Redis, and Server-Sent Events.
 **Queue Service** — HTTP + SSE server. Handles all client connections,
 queue joins/leaves, and streams real-time updates over SSE.
 
-**Match Worker** — Background process. Polls Redis queues every 1.5s,
-atomically pairs users, publishes match events.
+**Match Worker** — Background process. Fully event driven, wakes up instantly
+only when queue state changes. No polling, zero idle CPU usage. Atomically
+pairs users, publishes match events.
 
 **Redis** — Shared state. Stores queues as sorted sets (score = join
 timestamp for FCFS ordering). Pub/Sub carries queue-change and match
@@ -148,8 +149,6 @@ matching-service/
 |---|---|---|
 | `REDIS_HOST` | `localhost` | Redis hostname |
 | `REDIS_PORT` | `6379` | Redis port |
-| `POLL_INTERVAL_MS` | `1500` | How often to scan queues (ms) |
-
 ---
 
 ## API Reference
@@ -161,9 +160,9 @@ All endpoints require a `Bearer` token in the `Authorization` header.
 Authorization: Bearer user@example.com
 ```
 
-> **Note:** Authentication is currently stubbed. The Bearer token value
-> is used directly as the user's identifier. Firebase Auth will be
-> integrated in a future update.
+>  **Authentication is fully implemented using Firebase ID tokens.**
+> All endpoints require valid Firebase JWT tokens. Tokens are verified
+> cryptographically by the service.
 
 ---
 
@@ -329,7 +328,7 @@ Expected update on User A's stream (queue changed when B joined):
 data: {"type":"QUEUE_UPDATE","position":1,"top5":["alice@example.com","bob@example.com"],"queueLength":2}
 ```
 
-**Step 4 — Wait ~1.5 seconds for the match worker:**
+**Step 4 — Match happens instantly:**
 
 Both streams receive:
 ```
@@ -411,7 +410,7 @@ curl -N "http://localhost:3001/queue/join?topic=arrays&difficulty=medium" \
   -H "Authorization: Bearer alice@example.com"
 ```
 
-Expected after 10 seconds:
+Expected immediately when timer expires:
 ```
 data: {"type":"TIMEOUT"}
 ```

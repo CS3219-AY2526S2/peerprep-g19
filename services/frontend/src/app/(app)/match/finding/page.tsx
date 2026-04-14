@@ -25,6 +25,7 @@ function FindingMatchContent() {
   const [queueLength, setQueueLength] = useState<number>(0);
   const [matchFound, setMatchFound] = useState(false);
   const [cancelled, setCancelled] = useState(false);
+  const [sessionInvalidated, setSessionInvalidated] = useState(false);
 
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -56,6 +57,13 @@ function FindingMatchContent() {
 
     const controller = connectToMatchingQueue(topic, difficulty, token, {
       onQueueUpdate: (position, length) => {
+        if (position === 0) {
+          // User is no longer in this queue instance
+          setSessionInvalidated(true);
+          cleanup();
+          abortRef.current?.abort();
+          return;
+        }
         setQueuePosition(position);
         setQueueLength(length);
       },
@@ -111,6 +119,16 @@ function FindingMatchContent() {
 
     router.push("/match");
   };
+
+  if (sessionInvalidated) {
+    return (
+      <div className="flex flex-col items-center pt-16 text-center">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Session No Longer Active</h1>
+        <p className="text-gray-500 mb-8">You have joined the queue in another tab.</p>
+        <Button onClick={() => router.push("/match")}>Back to Match</Button>
+      </div>
+    );
+  }
 
   if (matchFound) {
     return (

@@ -125,7 +125,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     deploy:
-      replicas: 2
+      replicas: 1
 
   collaboration:
     build:
@@ -146,6 +146,11 @@ services:
     environment:
       PORT: 5050
       GOOGLE_GEMINI_API_KEY: ${GOOGLE_GEMINI_API_KEY}
+      GOOGLE_GEMINI_MODEL: ${GOOGLE_GEMINI_MODEL}
+      GOOGLE_GEMINI_TEMPERATURE: ${GOOGLE_GEMINI_TEMPERATURE}
+      GOOGLE_GEMINI_MAX_TOKENS: ${GOOGLE_GEMINI_MAX_TOKENS}
+      AI_MOCK_MODE: ${AI_MOCK_MODE}
+      E2E_AUTH_BYPASS: ${E2E_AUTH_BYPASS}
       QUESTION_SERVICE_URL: http://question-service:8000
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
       FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
