@@ -42,6 +42,14 @@ const router = Router();
 router.get('/join', authenticate, async (req: AuthRequest, res: Response) => {
   const userId = req.userId!;
 
+  // Prevent users in active collaboration session from joining queue
+  const activeSession = await redis.get(`active_session:${userId}`);
+  if (activeSession) {
+    return res.status(409).json({
+      error: "You are currently in an active collaboration session",
+    });
+  }
+
   // --- 1. Resolve queue params ---
   // Check if user is already sitting in a Redis queue (e.g. page refresh)
   const existingMeta = await redis.hgetall(userMetaKey(userId));

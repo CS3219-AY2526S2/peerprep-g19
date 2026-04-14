@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { parse } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
+import { Redis } from "ioredis";
 import * as Y from "yjs";
 import * as syncProtocol from "y-protocols/sync";
 import * as awarenessProtocol from "y-protocols/awareness";
@@ -20,6 +21,20 @@ import type { ClientMessage, ServerMessage } from "./types.js";
 
 const PORT = parseInt(process.env.PORT || "1999", 10);
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID;
+const REDIS_HOST = process.env.REDIS_HOST || "localhost";
+const REDIS_PORT = parseInt(process.env.REDIS_PORT || "6379", 10);
+const ACTIVE_SESSION_TTL = 3600; // 1 hour maximum session lock
+
+// Initialize Redis client for active session tracking
+const redis = new Redis({
+  host: REDIS_HOST,
+  port: REDIS_PORT,
+  lazyConnect: true,
+});
+
+redis.connect().catch((err) => {
+  console.warn("Redis connection failed - active session tracking disabled:", err.message);
+});
 
 // ── Yjs protocol constants ──────────────────────────────────────────────────
 const MSG_SYNC = 0;
@@ -301,6 +316,9 @@ wss.on("connection", (ws: WebSocket, req: import("http").IncomingMessage, user: 
   const roomId = pathname.split("/").filter(Boolean).pop() || "default";
   const connId = Math.random().toString(36).slice(2) + Date.now().toString(36);
 
+  // Mark user as being in an active collaboration session
+  redis.setex(`active_session:${user.uid}`, ACTIVE_SESSION_TTL, roomId).catch(() => {});
+
   // Store metadata
   connMeta.set(ws, { connId, roomId, uid: user.uid });
 
@@ -330,6 +348,9 @@ wss.on("connection", (ws: WebSocket, req: import("http").IncomingMessage, user: 
       awarenessProtocol.removeAwarenessStates(room.awareness, Array.from(tracked), null);
     }
     if (room.conns.size === 0) destroyRoom(roomId);
+
+    // Remove active session lock
+    redis.del(`active_session:${user.uid}`).catch(() => {});
 
     // Clean up session
     const meta = connMeta.get(ws);
