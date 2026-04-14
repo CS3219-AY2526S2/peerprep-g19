@@ -262,6 +262,24 @@ function handleCustomMessage(ws: WebSocket, roomId: string, msg: ClientMessage) 
       }
       break;
     }
+
+    case "chat": {
+      const chatUser = session.users.get(meta.connId);
+      if (!chatUser || !msg.text || typeof msg.text !== "string") return;
+      
+      // Sanitize and limit message length
+      const text = msg.text.trim().substring(0, 1000);
+      if (text.length === 0) return;
+
+      broadcastJSON(roomId, {
+        type: "chat-received",
+        userId: chatUser.userId,
+        username: chatUser.username,
+        text,
+        timestamp: Date.now()
+      });
+      break;
+    }
   }
 }
 
