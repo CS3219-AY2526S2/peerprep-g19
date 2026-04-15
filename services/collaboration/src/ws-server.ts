@@ -108,6 +108,8 @@ function getOrCreateRoom(name: string): Room {
   return room;
 }
 
+const MAX_ERRORS = 50;
+
 function handleYjsMessage(ws: WebSocket, room: Room, data: Uint8Array) {
   try {
     const decoder = decoding.createDecoder(data);
@@ -134,6 +136,11 @@ function handleYjsMessage(ws: WebSocket, room: Room, data: Uint8Array) {
     }
   } catch (err) {
     console.error("Yjs message error:", err);
+    const meta = connMeta.get(ws);
+    if (meta && ++meta.errorCount >= MAX_ERRORS) {
+      console.warn(`Closing connection ${meta.connId}: too many errors`);
+      ws.close(4002, "Too many errors");
+    }
   }
 }
 
@@ -173,6 +180,7 @@ interface ConnMeta {
   connId: string;
   roomId: string;
   uid: string;
+  errorCount: number;
 }
 
 const connMeta = new Map<WebSocket, ConnMeta>();
@@ -338,7 +346,11 @@ wss.on("connection", (ws: WebSocket, req: import("http").IncomingMessage, user: 
   redis.setex(`active_session:${user.uid}`, ACTIVE_SESSION_TTL, roomId).catch(() => {});
 
   // Store metadata
-  connMeta.set(ws, { connId, roomId, uid: user.uid });
+  connMeta.set(ws, { connId, roomId, uid: user.uid, errorCount: 0 });
+
+  // Mark connection alive for heartbeat
+  (ws as any).isAlive = true;
+  ws.on("pong", () => { (ws as any).isAlive = true; });
 
   // Set up Yjs room + sync
   const room = getOrCreateRoom(roomId);
@@ -353,50 +365,70 @@ wss.on("connection", (ws: WebSocket, req: import("http").IncomingMessage, user: 
         const msg: ClientMessage = JSON.parse(data.toString());
         handleCustomMessage(ws, roomId, msg);
       } catch {
-        // Not valid JSON — ignore
+        const meta = connMeta.get(ws);
+        if (meta && ++meta.errorCount >= MAX_ERRORS) {
+          console.warn(`Closing connection ${meta.connId}: too many errors`);
+          ws.close(4002, "Too many errors");
+        }
       }
     }
   });
 
   ws.on("close", () => {
-    // Clean up Yjs awareness
-    const tracked = room.conns.get(ws);
-    room.conns.delete(ws);
-    if (tracked && tracked.size > 0) {
-      awarenessProtocol.removeAwarenessStates(room.awareness, Array.from(tracked), null);
-    }
-    if (room.conns.size === 0) destroyRoom(roomId);
+    try {
+      // Clean up Yjs awareness
+      const tracked = room.conns.get(ws);
+      room.conns.delete(ws);
+      if (tracked && tracked.size > 0) {
+        awarenessProtocol.removeAwarenessStates(room.awareness, Array.from(tracked), null);
+      }
+      if (room.conns.size === 0) destroyRoom(roomId);
 
-    // Clean up session state when all connections are gone so a new match
-    // with the same session ID can start fresh instead of hitting stale
-    // "ended" state.
-    if (room.conns.size === 0) {
-      sessions.delete(roomId);
-    }
+      // Clean up session state when all connections are gone so a new match
+      // with the same session ID can start fresh instead of hitting stale
+      // "ended" state.
+      if (room.conns.size === 0) {
+        sessions.delete(roomId);
+      }
 
-    // Remove active session lock
-    redis.del(`active_session:${user.uid}`).catch(() => {});
+      // Remove active session lock
+      redis.del(`active_session:${user.uid}`).catch(() => {});
 
-    // Clean up session
-    const meta = connMeta.get(ws);
-    if (meta) {
-      const session = sessions.get(meta.roomId);
-      if (session) {
-        const removed = removeUser(session, meta.connId);
-        if (removed) {
-          broadcastJSON(meta.roomId, {
-            type: "user-disconnected",
-            userId: removed.userId,
-            username: removed.username,
-          });
+      // Clean up session
+      const meta = connMeta.get(ws);
+      if (meta) {
+        const session = sessions.get(meta.roomId);
+        if (session) {
+          const removed = removeUser(session, meta.connId);
+          if (removed) {
+            broadcastJSON(meta.roomId, {
+              type: "user-disconnected",
+              userId: removed.userId,
+              username: removed.username,
+            });
+          }
         }
       }
+    } finally {
       connMeta.delete(ws);
     }
   });
 
   ws.on("error", console.error);
 });
+
+// ── Heartbeat: detect and clean up dead connections ─────────────────────────
+const HEARTBEAT_INTERVAL = 30_000;
+const heartbeatInterval = setInterval(() => {
+  for (const client of wss.clients) {
+    if (!(client as any).isAlive) {
+      client.terminate();
+      continue;
+    }
+    (client as any).isAlive = false;
+    client.ping();
+  }
+}, HEARTBEAT_INTERVAL);
 
 httpServer.listen(PORT, () => {
   console.log(`Collaboration server running on port ${PORT}`);
