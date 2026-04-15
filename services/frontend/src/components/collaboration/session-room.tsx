@@ -19,7 +19,8 @@ import {
   type SupportedLanguage,
 } from "@/types/collaboration";
 import type { Question } from "@/types/question";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, ImageIcon, Lightbulb } from "lucide-react";
+import Image from "next/image";
 
 function SessionContent() {
   const params = useParams();
@@ -34,7 +35,10 @@ function SessionContent() {
 
   const [question, setQuestion] = useState<Question | null>(null);
   const [showEndModal, setShowEndModal] = useState(false);
+  const [activeLeftTab, setActiveLeftTab] = useState<"question" | "model_answer">("question");
   const [expandedHint, setExpandedHint] = useState<number | null>(null);
+  const [imagesExpanded, setImagesExpanded] = useState(false);
+  const [activeImage, setActiveImage] = useState<number>(0);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState<AIExplainResult | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -92,6 +96,7 @@ function SessionContent() {
           topics: [],
           difficulty: (difficulty as "Easy" | "Medium" | "Hard") || "Medium",
           hints: [],
+          images: [],
           version: 1,
         });
       });
@@ -196,9 +201,40 @@ function SessionContent() {
 
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left panel — question */}
-        <div className="w-[40%] overflow-y-auto border-r border-gray-200 bg-white p-6">
+        {/* Left panel — question / model answer tabs */}
+        <div className="w-[40%] flex flex-col border-r border-gray-200 bg-white overflow-hidden">
+          {/* Tab bar */}
+          <div className="flex shrink-0 border-b border-gray-200">
+            <button
+              onClick={() => setActiveLeftTab("question")}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                activeLeftTab === "question"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Question
+            </button>
+            <button
+              onClick={() => question?.model_answer_code && setActiveLeftTab("model_answer")}
+              disabled={!question?.model_answer_code}
+              title={!question?.model_answer_code ? "No model answer available" : undefined}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                activeLeftTab === "model_answer"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              } ${!question?.model_answer_code ? "opacity-40 cursor-not-allowed" : ""}`}
+            >
+              <Lightbulb size={13} />
+              Model Answer
+            </button>
+          </div>
+
+          {/* Tab content */}
+          <div className="flex-1 overflow-y-auto p-6">
           {question && (
+            <>
+          {activeLeftTab === "question" && (
             <>
               <div className="flex items-center gap-2 mb-1">
                 <h2 className="text-xl font-bold">{question.title}</h2>
@@ -349,13 +385,131 @@ function SessionContent() {
                   </div>
                 )}
               </div>
-              
 
-              <Button variant="danger" className="w-full" onClick={() => setShowEndModal(true)}>
-                End Session
-              </Button>
+              <div className="prose prose-sm max-w-none mb-6">
+                <p className="whitespace-pre-wrap text-gray-700">{question.description}</p>
+              </div>
+
+              {question.images && question.images.length > 0 && (
+                <div className="mb-6 rounded-md border border-gray-200 overflow-hidden">
+                  <button
+                    onClick={() => setImagesExpanded(!imagesExpanded)}
+                    className="flex w-full items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <ImageIcon size={14} className="text-gray-500" />
+                      Images ({question.images.length})
+                    </span>
+                    {imagesExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  </button>
+
+                  {imagesExpanded && (
+                    <div className="border-t border-gray-200 p-3 space-y-3">
+                      {/* Thumbnail strip */}
+                      {question.images.length > 1 && (
+                        <div className="flex gap-2">
+                          {question.images.map((src, i) => (
+                            <button
+                              key={i}
+                              onClick={() => setActiveImage(i)}
+                              className={`relative h-12 w-12 shrink-0 overflow-hidden rounded border-2 transition-colors ${
+                                activeImage === i
+                                  ? "border-blue-500"
+                                  : "border-gray-200 hover:border-gray-400"
+                              }`}
+                            >
+                              <Image
+                                src={src}
+                                alt={`Thumbnail ${i + 1}`}
+                                fill
+                                className="object-cover"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Main image */}
+                      <div className="relative w-full overflow-hidden rounded-md bg-gray-100" style={{ minHeight: "180px" }}>
+                        <Image
+                          src={question.images[activeImage]}
+                          alt={`Question image ${activeImage + 1}`}
+                          width={600}
+                          height={400}
+                          className="w-full h-auto object-contain"
+                        />
+                      </div>
+
+                      {question.images.length > 1 && (
+                        <p className="text-center text-xs text-gray-400">
+                          {activeImage + 1} / {question.images.length}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {question.hints.length > 0 && (
+                <div className="space-y-2 mb-6">
+                  {question.hints.map((hint, i) => (
+                    <div key={i} className="rounded-md border border-gray-200">
+                      <button
+                        onClick={() => setExpandedHint(expandedHint === i ? null : i)}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer"
+                      >
+                        {expandedHint === i ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        Hint {i + 1}{expandedHint !== i && " (click to expand)"}
+                      </button>
+                      {expandedHint === i && (
+                        <div className="border-t border-gray-200 px-3 py-2 text-sm text-gray-600">
+                          {hint}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Button variant="danger" className="flex-1" onClick={() => setShowEndModal(true)}>
+                  End Session
+                </Button>
+              </div>
             </>
           )}
+
+          {/* Model Answer tab */}
+          {activeLeftTab === "model_answer" && (
+            <>
+              <div className="flex items-center gap-2 mb-4">
+                <Lightbulb size={18} className="text-yellow-500" />
+                <h2 className="text-lg font-semibold">Model Answer</h2>
+                {question?.model_answer_lang && (
+                  <span className="text-xs text-gray-400 font-mono bg-gray-100 rounded px-2 py-1 ml-auto">
+                    {question.model_answer_lang}
+                  </span>
+                )}
+              </div>
+
+              {question?.model_answer_code ? (
+                <div className="flex flex-col space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Solution</p>
+                  <pre className="overflow-auto rounded-md bg-gray-900 p-4 text-xs text-gray-100 leading-relaxed">
+                    <code>{question.model_answer_code}</code>
+                  </pre>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center text-center text-gray-400 py-16">
+                  <Lightbulb size={32} className="mb-3 opacity-30" />
+                  <p className="text-sm">No model answer available for this question.</p>
+                </div>
+              )}
+            </>
+          )}
+            </>
+          )}
+          </div>
         </div>
 
         {/* Right panel — code editor */}
@@ -395,6 +549,7 @@ function SessionContent() {
           </div>
         </div>
       </div>
+
 
       {/* End session modal */}
       <Modal open={showEndModal} onClose={() => setShowEndModal(false)}>
