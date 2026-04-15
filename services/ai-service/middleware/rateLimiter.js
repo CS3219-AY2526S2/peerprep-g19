@@ -15,4 +15,15 @@ const aiRateLimiter = rateLimit({
   },
 });
 
-module.exports = { aiRateLimiter };
+const aiDailyRateLimiter = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000, // 24 hours
+  max: 20,
+  message: {
+    error: "Daily request limit exceeded, please try again tomorrow",
+  },
+  keyGenerator: (req) => {
+    return req.user?.uid || ipKeyGenerator(req);
+  },
+});
+
+module.exports = { aiRateLimiter, aiDailyRateLimiter };
