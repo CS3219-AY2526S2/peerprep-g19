@@ -13,6 +13,13 @@ interface UseCollaborationOptions {
   username: string;
 }
 
+export interface ChatMessage {
+  userId: string;
+  username: string;
+  text: string;
+  timestamp: number;
+}
+
 interface CollaborationState {
   ytext: Y.Text | null;
   awareness: Awareness | null;
@@ -23,6 +30,7 @@ interface CollaborationState {
   sessionEnded: boolean;
   endedBy: string | null;
   partnerDisconnected: boolean;
+  messages: ChatMessage[];
 }
 
 export function useCollaboration({ sessionId, userId, username }: UseCollaborationOptions) {
@@ -36,6 +44,7 @@ export function useCollaboration({ sessionId, userId, username }: UseCollaborati
     sessionEnded: false,
     endedBy: null,
     partnerDisconnected: false,
+    messages: [],
   });
 
   const providerRef = useRef<WebsocketProvider | null>(null);
@@ -106,6 +115,18 @@ export function useCollaboration({ sessionId, userId, username }: UseCollaborati
           case "language-changed":
             setState((prev) => ({ ...prev, language: msg.language as SupportedLanguage }));
             break;
+          case "chat-received":
+            setState(prev => ({
+              ...prev,
+              messages: [...prev.messages, {
+                userId: msg.userId,
+                username: msg.username,
+                text: msg.text,
+                timestamp: msg.timestamp
+              }]
+            }));
+            break;
+            
           case "error":
             console.error("Collaboration error:", msg.message);
             break;
@@ -155,5 +176,11 @@ export function useCollaboration({ sessionId, userId, username }: UseCollaborati
     providerRef.current?.ws?.send(JSON.stringify({ type: "language-change", language: lang }));
   }, []);
 
-  return { ...state, endSession, changeLanguage };
+  const sendChatMessage = useCallback((text: string) => {
+    if (providerRef.current?.ws?.readyState === WebSocket.OPEN) {
+      providerRef.current.ws.send(JSON.stringify({ type: "chat", text }));
+    }
+  }, []);
+
+  return { ...state, endSession, changeLanguage, sendChatMessage };
 }
