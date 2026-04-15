@@ -35,6 +35,15 @@ GOOGLE_GEMINI_API_KEY=...
 # QN_SERVICE_CLOUD_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/
 ```
 
+- Firebase service account JSON files:
+
+```text
+services/user-service/config/service_key.json
+services/ai-service/config/service_key.json
+```
+
+If you already have the Firebase key in one location, copy it to the other service's `config` folder so both services can read the same credentials.
+
 - Frontend `.env.local`:
 
 ```bash
