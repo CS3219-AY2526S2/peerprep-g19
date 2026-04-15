@@ -11,6 +11,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@types/ioredis": "^4.28.10",
+    "ioredis": "^5.10.1",
     "jose": "^6.0.11",
     "lib0": "^0.2.99",
     "ws": "^8.18.0",

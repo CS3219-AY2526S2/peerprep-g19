@@ -52,11 +52,32 @@ function SessionContent() {
     partnerDisconnected,
     endSession,
     changeLanguage,
+    messages,
+    sendChatMessage,
   } = useCollaboration({
     sessionId,
     userId: user?.id || "anonymous",
     username: user?.username || "Anonymous",
   });
+
+  const chatInputRef = useRef<HTMLInputElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto scroll chat to bottom when new messages arrive
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const handleChatSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const input = chatInputRef.current;
+    if (!input || !input.value.trim()) return;
+    
+    sendChatMessage(input.value.trim());
+    input.value = "";
+  };
 
   // Load question data
   useEffect(() => {
@@ -186,6 +207,74 @@ function SessionContent() {
                 {question.difficulty}
               </Badge>
 
+              <div className="prose prose-sm max-w-none mb-6">
+                <p className="whitespace-pre-wrap text-gray-700">{question.description}</p>
+              </div>
+
+              {question.hints.length > 0 && (
+                <div className="space-y-2 mb-6">
+                  {question.hints.map((hint, i) => (
+                    <div key={i} className="rounded-md border border-gray-200">
+                      <button
+                        onClick={() => setExpandedHint(expandedHint === i ? null : i)}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer"
+                      >
+                        {expandedHint === i ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        Hint {i + 1}{expandedHint !== i && " (click to expand)"}
+                      </button>
+                      {expandedHint === i && (
+                        <div className="border-t border-gray-200 px-3 py-2 text-sm text-gray-600">
+                          {hint}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Chat Box - Placed exactly above End Session button */}
+              <div className="mb-4 rounded-md border border-gray-200 bg-gray-50">
+                <div className="px-3 py-2 border-b border-gray-200">
+                  <h3 className="text-sm font-semibold text-gray-800">Chat</h3>
+                </div>
+                
+                <div 
+                  ref={chatScrollRef}
+                  className="h-75 overflow-y-auto p-3 space-y-2"
+                >
+                  {messages.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center">No messages yet</p>
+                  ) : (
+                    messages.map((msg, i) => (
+                      <div 
+                        key={i} 
+                        className={`text-xs ${msg.userId === user?.id ? 'text-right' : 'text-left'}`}
+                      >
+                        <div className={`inline-block max-w-[85%] rounded-lg px-3 py-2 ${
+                          msg.userId === user?.id 
+                            ? 'bg-blue-500 text-white' 
+                            : 'bg-gray-200 text-gray-800'
+                        }`}>
+                          {msg.userId !== user?.id && (
+                            <p className="font-semibold mb-1">{msg.username}</p>
+                          )}
+                          <p>{msg.text}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                
+                <form onSubmit={handleChatSubmit} className="p-3 border-t border-gray-200">
+                  <input
+                    ref={chatInputRef}
+                    type="text"
+                    placeholder="Type a message..."
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </form>
+              </div>
+
               {/* AI Assist Panel */}
               <div className="mb-6 rounded-md border border-gray-200 bg-gray-50 p-4">
                 <div className="mb-3 flex items-center justify-between">
@@ -260,31 +349,7 @@ function SessionContent() {
                   </div>
                 )}
               </div>
-
-              <div className="prose prose-sm max-w-none mb-6">
-                <p className="whitespace-pre-wrap text-gray-700">{question.description}</p>
-              </div>
-
-              {question.hints.length > 0 && (
-                <div className="space-y-2 mb-6">
-                  {question.hints.map((hint, i) => (
-                    <div key={i} className="rounded-md border border-gray-200">
-                      <button
-                        onClick={() => setExpandedHint(expandedHint === i ? null : i)}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer"
-                      >
-                        {expandedHint === i ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        Hint {i + 1}{expandedHint !== i && " (click to expand)"}
-                      </button>
-                      {expandedHint === i && (
-                        <div className="border-t border-gray-200 px-3 py-2 text-sm text-gray-600">
-                          {hint}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+              
 
               <Button variant="danger" className="w-full" onClick={() => setShowEndModal(true)}>
                 End Session
