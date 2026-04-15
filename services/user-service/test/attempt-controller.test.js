@@ -123,6 +123,66 @@ describe("attempt-controller", () => {
     expect(res.body.pagination.nextCursor).toBe("attempt-1");
   });
 
+  it("getAttemptHistory passes validated difficulty filter", async () => {
+    repositoryMocks.findUserById.mockResolvedValueOnce({ id: "uid-1" });
+    repositoryMocks.listQuestionAttemptsByUser.mockResolvedValueOnce({
+      attempts: [{ id: "attempt-2", questionTitle: "3Sum" }],
+      nextCursor: null,
+    });
+
+    const req = {
+      params: { id: "uid-1" },
+      query: { limit: "20", difficulty: "Medium" },
+    };
+    const res = createMockRes();
+
+    await getAttemptHistory(req, res);
+
+    expect(repositoryMocks.listQuestionAttemptsByUser).toHaveBeenCalledWith(
+      "uid-1",
+      {
+        limit: 20,
+        startAfter: undefined,
+        topic: undefined,
+        difficulty: "Medium",
+        status: undefined,
+      },
+    );
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("getAttemptHistory returns 400 for invalid difficulty", async () => {
+    repositoryMocks.findUserById.mockResolvedValueOnce({ id: "uid-1" });
+
+    const req = {
+      params: { id: "uid-1" },
+      query: { difficulty: "Impossible" },
+    };
+    const res = createMockRes();
+
+    await getAttemptHistory(req, res);
+
+    expect(repositoryMocks.listQuestionAttemptsByUser).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ message: "Invalid difficulty" });
+  });
+
+  it("getAttemptHistory returns 400 for invalid status", async () => {
+    repositoryMocks.findUserById.mockResolvedValueOnce({ id: "uid-1" });
+
+    const req = {
+      params: { id: "uid-1" },
+      query: { status: "done" },
+    };
+    const res = createMockRes();
+
+    await getAttemptHistory(req, res);
+
+    expect(repositoryMocks.listQuestionAttemptsByUser).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ message: "Invalid status" });
+  });
+
   it("getAttemptSummary returns aggregated stats", async () => {
     repositoryMocks.findUserById.mockResolvedValueOnce({ id: "uid-1" });
     repositoryMocks.getQuestionAttemptSummaryByUser.mockResolvedValueOnce({

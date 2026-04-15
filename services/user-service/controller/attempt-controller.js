@@ -37,6 +37,12 @@ function normalizeLimit(limitParam) {
   return Math.min(parsed, 100);
 }
 
+function normalizeStringFilter(rawValue) {
+  if (typeof rawValue !== "string") return undefined;
+  const trimmed = rawValue.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 /**
  * Record Question Attempt
  *
@@ -145,12 +151,23 @@ export async function getAttemptHistory(req, res) {
     }
 
     const limit = normalizeLimit(req.query.limit);
+    const difficulty = normalizeStringFilter(req.query.difficulty);
+    const status = normalizeStringFilter(req.query.status);
+
+    if (difficulty && !VALID_DIFFICULTIES.includes(difficulty)) {
+      return res.status(400).json({ message: "Invalid difficulty" });
+    }
+
+    if (status && !VALID_ATTEMPT_STATUSES.includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+
     const options = {
       limit,
-      startAfter: req.query.cursor,
-      topic: req.query.topic,
-      difficulty: req.query.difficulty,
-      status: req.query.status,
+      startAfter: normalizeStringFilter(req.query.cursor),
+      topic: normalizeStringFilter(req.query.topic),
+      difficulty,
+      status,
     };
 
     const { attempts, nextCursor } = await listQuestionAttemptsByUser(
