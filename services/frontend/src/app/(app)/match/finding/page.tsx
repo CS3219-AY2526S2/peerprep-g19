@@ -76,12 +76,14 @@ function FindingMatchContent() {
           // so both matched users compute the same deterministic session ID
           const sessionId = await generateSessionId(user!.id, peerId, matchedAt);
           const question = await fetchDeterministicQuestion(topic, difficulty, sessionId);
-          const questionParam = question
-            ? encodeURIComponent(question.title)
-            : "";
+          if (!question) {
+            toast("No questions available for this topic and difficulty. Try a different combination.", "error");
+            router.push("/match");
+            return;
+          }
 
           router.push(
-            `/session/${sessionId}?question=${questionParam}&difficulty=${encodeURIComponent(difficulty)}&topic=${encodeURIComponent(topic)}`,
+            `/session/${sessionId}?question=${encodeURIComponent(question.title)}&difficulty=${encodeURIComponent(difficulty)}&topic=${encodeURIComponent(topic)}`,
           );
         } catch {
           toast("Matched but failed to load session. Please try again.", "error");
