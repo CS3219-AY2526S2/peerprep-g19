@@ -367,6 +367,13 @@ wss.on("connection", (ws: WebSocket, req: import("http").IncomingMessage, user: 
     }
     if (room.conns.size === 0) destroyRoom(roomId);
 
+    // Clean up session state when all connections are gone so a new match
+    // with the same session ID can start fresh instead of hitting stale
+    // "ended" state.
+    if (room.conns.size === 0) {
+      sessions.delete(roomId);
+    }
+
     // Remove active session lock
     redis.del(`active_session:${user.uid}`).catch(() => {});
 

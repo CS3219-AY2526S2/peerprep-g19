@@ -107,6 +107,8 @@ export function useCollaboration({ sessionId, userId, username }: UseCollaborati
             setState((prev) => ({ ...prev, userCount: msg.userCount, partnerDisconnected: false }));
             break;
           case "session-ended":
+            // Disconnect provider to stop y-websocket auto-reconnect
+            providerRef.current?.disconnect();
             setState((prev) => ({ ...prev, sessionEnded: true, endedBy: msg.endedBy }));
             break;
           case "user-disconnected":
@@ -129,6 +131,11 @@ export function useCollaboration({ sessionId, userId, username }: UseCollaborati
             
           case "error":
             console.error("Collaboration error:", msg.message);
+            // Stop reconnecting if the session has ended
+            if (msg.message === "Session has ended") {
+              providerRef.current?.disconnect();
+              setState((prev) => ({ ...prev, sessionEnded: true, endedBy: "server" }));
+            }
             break;
         }
       } catch {
