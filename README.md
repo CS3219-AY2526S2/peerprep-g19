@@ -272,6 +272,19 @@ curl http://localhost:3002/api/v1/health
 - **Redis Issues**: Ensure Redis is running (`redis-cli ping` should return "PONG")
 - **Service Dependencies**: Start services in the correct order
 
+---
+
+## AI Usage Disclosure
+
+### AI Use Summary
+**Tools Used:** Cline, Claude 3.7 Sonnet, GitHub Copilot, ChatGPT GPT-4o, Bytedance Seed 2
+
+**Prohibited phases avoided:** All requirements elicitation, architecture decisions, system design, component boundaries and data structures were created manually without AI assistance.
+
+Full prompt logs and usage history: `/ai/name-usage-log.md`
+
+---
+
 > **Note**: The **Matching Service** is not yet fully implemented and is currently stubbed in the frontend.
 
 ### 9. Development Tips
