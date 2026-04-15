@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { getAllTopics } from "@/lib/api/question";
+import { getAllTopics, listQuestions } from "@/lib/api/question";
+import { useToast } from "@/components/ui/toast";
 
 const difficulties = ["Easy", "Medium", "Hard"] as const;
 
@@ -35,11 +36,13 @@ function SelectCard({
 
 export default function MatchPage() {
   const router = useRouter();
+  const { toast } = useToast();
   const [difficulty, setDifficulty] = useState<string | null>(null);
   const [topic, setTopic] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [topics, setTopics] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   const fetchTopics = useCallback(async (searchQuery: string) => {
     setLoading(true);
@@ -67,9 +70,21 @@ export default function MatchPage() {
     fetchTopics("");
   }, [fetchTopics]);
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (!difficulty || !topic) return;
-    router.push(`/match/finding?difficulty=${encodeURIComponent(difficulty)}&topic=${encodeURIComponent(topic)}`);
+    setStarting(true);
+    try {
+      const response = await listQuestions({ topic, difficulty, limit: 1 });
+      if (response.total === 0) {
+        toast(`No ${difficulty} questions available for ${topic}. Try a different combination.`, "error");
+        return;
+      }
+      router.push(`/match/finding?difficulty=${encodeURIComponent(difficulty)}&topic=${encodeURIComponent(topic)}`);
+    } catch {
+      toast("Failed to verify question availability. Please try again.", "error");
+    } finally {
+      setStarting(false);
+    }
   };
 
   return (
@@ -127,10 +142,10 @@ export default function MatchPage() {
         <Button
           className="w-full"
           size="lg"
-          disabled={!difficulty || !topic}
+          disabled={!difficulty || !topic || starting}
           onClick={handleStart}
         >
-          Start Matching
+          {starting ? "Checking..." : "Start Matching"}
         </Button>
       </div>
     </div>
