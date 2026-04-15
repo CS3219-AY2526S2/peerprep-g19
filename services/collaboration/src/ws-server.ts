@@ -433,3 +433,19 @@ const heartbeatInterval = setInterval(() => {
 httpServer.listen(PORT, () => {
   console.log(`Collaboration server running on port ${PORT}`);
 });
+
+// ── Graceful shutdown ───────────────────────────────────────────────────────
+function gracefulShutdown() {
+  console.log("Shutting down collaboration server...");
+  clearInterval(heartbeatInterval);
+  wss.close();
+  for (const [ws] of connMeta) {
+    ws.close(1001, "Server shutting down");
+  }
+  redis.disconnect();
+  httpServer.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 5000);
+}
+
+process.on("SIGTERM", gracefulShutdown);
+process.on("SIGINT", gracefulShutdown);
