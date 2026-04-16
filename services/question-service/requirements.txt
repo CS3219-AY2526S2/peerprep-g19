@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pydantic
+motor
+firebase-admin
+pytest
+pytest-asyncio
+httpx
+anyio
